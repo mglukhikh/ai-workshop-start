@@ -17,10 +17,14 @@ import { CLI, EXAMPLE, EXAMPLE_COMMIT, FIXTURE } from './helpers.ts';
 
 const sharedPath = 'tools/.agents/skills/shared/SKILL.md';
 const repos = ['JetBrains/first', 'JetBrains/second'];
+const emptyRepo = 'JetBrains/empty';
 const github = replay({
   ...EXAMPLE,
   'https://api.github.com/orgs/JetBrains/repos?per_page=100&page=1': {
-    status: 200, body: repos.map((full_name) => ({ full_name, default_branch: 'main' })),
+    status: 200, body: [...repos, emptyRepo].map((full_name) => ({ full_name, default_branch: 'main' })),
+  },
+  [`https://api.github.com/repos/${emptyRepo}/commits/main`]: {
+    status: 409, body: { message: 'Git Repository is empty.' },
   },
   ...Object.fromEntries(repos.flatMap((repo) => [
     [`https://api.github.com/repos/${repo}/commits/main`, { status: 200, body: { sha: EXAMPLE_COMMIT } }],
@@ -236,8 +240,12 @@ test('the served page shows organization progress before the final result', asyn
   assert.deepEqual(JSON.parse(events.slice(0, newline)), { progress: { id: repos[0], completed: 1 } });
   await writer.write(events.slice(0, newline + 1));
   await progressShown;
-  await writer.write(events.slice(newline + 1));
-  for (let next = await reader.read(); !next.done; next = await reader.read()) await writer.write(next.value);
+  let remaining = events.slice(newline + 1);
+  for (let next = await reader.read(); !next.done; next = await reader.read()) remaining += next.value;
+  const [, emptyProgress] = remaining.trimEnd().split('\n').map((line) => JSON.parse(line));
+  await writer.write(remaining);
+  await writer.close();
+  assert.deepEqual(emptyProgress, { progress: { id: emptyRepo, completed: 3 } });
   await pending;
   assert.match(status.textContent!, /JetBrains · 2 skills/);
   assert.equal(Reflect.get(button, 'disabled'), false);
