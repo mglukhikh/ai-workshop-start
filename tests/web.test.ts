@@ -356,7 +356,7 @@ test('disconnecting aborts the in-flight GitHub request and stops the scan', { t
 test('the organization deadline cancels the current request and streams partial results', { timeout: 5000 }, async (t) => {
   const deadline = new AbortController();
   const timeout = AbortSignal.timeout;
-  t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 180_000 ? deadline.signal : timeout(ms));
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 300_000 ? deadline.signal : timeout(ms));
   let cancelled = false;
   const server = await serve({
     port: 0,
@@ -382,7 +382,33 @@ test('the organization deadline cancels the current request and streams partial 
     assert.deepEqual(events.at(-2), { progress: { completed: 1, total: 3, current: repos[1] } });
     const { result } = events.at(-1);
     assert.deepEqual(result.skills.map((skill: { repository: string }) => skill.repository), [repos[0]]);
-    assert.match(result.warnings.at(-1), /3-minute limit/);
+    assert.match(result.warnings.at(-1), /5-minute limit/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('an organization scan uses the remaining quota and streams partial results when rate-limited', async () => {
+  const server = await serve({
+    port: 0,
+    open: (input, options) => openTarget(input, {
+      ...options,
+      fetch: async (url, init) => {
+        if (url.includes(`/repos/${repos[1]}/`)) {
+          return new Response(null, { status: 403, headers: { 'x-ratelimit-remaining': '0' } });
+        }
+        const response = await github(url, init);
+        if (url.includes('/orgs/')) response.headers.set('x-ratelimit-remaining', '2');
+        return response;
+      },
+    }),
+  });
+  try {
+    const response = await fetch(`${server.url}/api/scan?repo=github.com/JetBrains&progress=1`);
+    const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line));
+    const { result } = events.at(-1);
+    assert.deepEqual(result.skills.map((skill: { repository: string }) => skill.repository), [repos[0]]);
+    assert.match(result.warnings.at(-1), /GitHub rate limit reached.*Showing results from completed repositories/);
   } finally {
     await server.close();
   }

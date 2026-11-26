@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from './errors.ts';
 import { findSkills, type SkillFile } from './find.ts';
 import { sortSkills, type Repository, type Skill } from './model.ts';
 import { parseSkill } from './parse.ts';
@@ -30,8 +31,13 @@ export async function scan(source: ScanTarget): Promise<ScanResult> {
         for (const warning of result.warnings) warnings.push(`${repository.repository.id}: ${warning}`);
       }
     } catch (error) {
-      if (!source.deadline?.aborted || error !== source.deadline.reason) throw error;
-      warnings.push('Organization scan reached the 3-minute limit. Showing results from completed repositories.');
+      if (source.deadline?.aborted && error === source.deadline.reason) {
+        warnings.push('Organization scan reached the 5-minute limit. Showing results from completed repositories.');
+      } else if (error instanceof GitHubRateLimitError) {
+        warnings.push(`${error.message}. Showing results from completed repositories.`);
+      } else {
+        throw error;
+      }
     }
     return { repository: source.repository, skills: sortSkills(skills), warnings };
   }

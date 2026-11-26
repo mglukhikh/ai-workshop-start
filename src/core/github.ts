@@ -1,4 +1,4 @@
-import { AtlasError } from './errors.ts';
+import { AtlasError, GitHubRateLimitError } from './errors.ts';
 import { SKILL_ROOTS } from './find.ts';
 import type { ScanTarget, Source } from './scan.ts';
 
@@ -55,18 +55,10 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
           notFound,
           [404],
           page === 1 ? 404 : undefined,
-          (response, repositories) => {
+          (response) => {
             const lastLink = response.headers.get('link')?.split(',').find((link) => /;\s*rel="last"/.test(link));
             const lastPage = Number(lastLink?.match(/[?&]page=(\d+)(?:&|>)/)?.[1]);
             if (Number.isSafeInteger(lastPage * 100) && lastPage > page) total = lastPage * 100;
-            const remaining = response.headers.get('x-ratelimit-remaining');
-            const unscanned = new Set((repositories as GitHubRepository[])
-              .map((repo) => repo.full_name).filter((id) => !seen.has(id)));
-            if (remaining !== null && 2 * unscanned.size > Number(remaining)) {
-              throw new AtlasError(options.token
-                ? 'GitHub rate limit too low to scan this organization; try again after it resets'
-                : 'GitHub rate limit too low to scan this organization; set GITHUB_TOKEN and retry');
-            }
           },
         );
         if (!repos) {
@@ -222,12 +214,19 @@ function client({ fetch, token, signal: scanSignal }: GitHubOptions) {
       const message = (body as { message?: unknown } | undefined)?.message;
       const text = typeof message === 'string' ? message : '';
       if (notFoundStatuses.includes(response.status)) throw new AtlasError(notFound);
-      if ((response.status === 403 || response.status === 429) && /rate limit/i.test(text)) {
-        throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
-      }
+      checkRateLimit(response, text);
       if (response.status === 401) throw new AtlasError('GitHub rejected the token in GITHUB_TOKEN');
       throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
     });
+  }
+
+  function checkRateLimit(response: Response, message = '') {
+    if (response.status === 429 || (response.status === 403 && (
+      response.headers.get('x-ratelimit-remaining') === '0' ||
+      response.headers.has('retry-after') || /rate limit/i.test(message)
+    ))) {
+      throw new GitHubRateLimitError(`GitHub rate limit reached; ${token ? 'try again after it resets' : 'set GITHUB_TOKEN'}`);
+    }
   }
 
   return {
@@ -241,6 +240,7 @@ function client({ fetch, token, signal: scanSignal }: GitHubOptions) {
       const requestHeaders = authenticated ? { ...headers, Accept: 'application/vnd.github.raw+json' } : undefined;
       return get(url, requestHeaders, async (response) => {
         if (response.status === 404) return undefined;
+        checkRateLimit(response);
         if (!response.ok) throw new AtlasError(`GitHub answered ${response.status} for ${url}`);
         return new Uint8Array(await response.arrayBuffer());
       });
