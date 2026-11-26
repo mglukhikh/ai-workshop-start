@@ -1,5 +1,6 @@
 # Command line
 `./skill-atlas scan <GitHub URL | directory>`
+- `github.com/<organization>` or `github.com/orgs/<organization>`: the default-branch commits of all accessible repositories
 - `github.com/<owner>/<repo>`: the default branch's latest commit
 - `github.com/<owner>/<repo>/tree/<commit | branch>`: that commit, or the branch's latest
 Prints the result **at once**; *nothing is stored*.

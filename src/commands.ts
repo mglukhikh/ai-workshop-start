@@ -2,11 +2,11 @@
 // terminal: everything that differs between them comes in through the context.
 import { AtlasError } from './core/errors.ts';
 import { skillLink, type Repository, type Skill } from './core/model.ts';
-import { scan, type Source } from './core/scan.ts';
+import { scan, type ScanTarget } from './core/scan.ts';
 
 export type Context = {
   /** Opens what the user asked to scan. */
-  open(input: string): Promise<Source>;
+  open(input: string): Promise<ScanTarget>;
   print(text: string): void;
   /** Errors and warnings. */
   error(text: string): void;
@@ -16,7 +16,7 @@ export type Context = {
 
 const usage = `Usage: skill-atlas <command>
 
-  scan <GitHub URL | directory>   find every SKILL.md in a repository and print it
+  scan <GitHub URL | directory>   find skills in a repository or GitHub organization
   serve [port]                    open the local web view, on port 4173 by default
   help                            show this help`;
 

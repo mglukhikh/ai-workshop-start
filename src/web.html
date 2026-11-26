@@ -39,7 +39,7 @@
     <button id="scan">Scan</button>
   </form>
 </header>
-<div id="status">Paste a repository link and press Scan.</div>
+<div id="status">Paste a repository or organization link and press Scan.</div>
 <ul id="warnings"></ul>
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
@@ -86,22 +86,22 @@
     function renderSkills() {
       const query = filter.value.trim().toLowerCase();
       const words = query ? query.split(/\s+/) : [];
-      const matches = skills.filter(({ name, description, path }) => {
-        const searchable = `${name} ${description} ${path}`.toLowerCase();
+      const matches = skills.filter(({ name, description, path, repository: skillRepository }) => {
+        const searchable = `${name} ${description} ${path} ${skillRepository === repository.id ? '' : skillRepository}`.toLowerCase();
         return words.every((word) => searchable.includes(word));
       });
       $('skill').replaceChildren();
-      $('skills').replaceChildren(...matches.map(skillOption));
+      $('skills').replaceChildren(...matches.map((skill) => skillOption(skill, repository.id)));
       if (matches.length > 0) select($('skills').firstChild, matches[0]);
       else if (words.length > 0) $('skill').textContent = 'No matching skills.';
     }
   }
 
-  function skillOption(skill) {
+  function skillOption(skill, repositoryId) {
     const item = element('li', { role: 'option', tabIndex: 0 },
         element('div', { className: 'name', textContent: skill.name }),
         element('div', { className: 'description', textContent: skill.description }),
-        element('div', { className: 'path', textContent: skill.path }));
+        element('div', { className: 'path', textContent: skill.repository === repositoryId ? skill.path : `${skill.repository} · ${skill.path}` }));
     item.onclick = () => select(item, skill);
     item.onkeydown = (event) => { if (event.key === 'Enter') select(item, skill); };
     return item;

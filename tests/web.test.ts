@@ -10,15 +10,30 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { parseHTML, type HTMLInputElement, type HTMLElement } from 'linkedom';
 import { run } from '../src/commands.ts';
-import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
 import { replay } from '../src/core/replay.ts';
-import { openDirectory } from '../src/local.ts';
+import { openTarget } from '../src/open.ts';
 import { serve } from '../src/web.ts';
 import { CLI, EXAMPLE, EXAMPLE_COMMIT, FIXTURE } from './helpers.ts';
 
-const github = replay(EXAMPLE);
+const sharedPath = 'tools/.agents/skills/shared/SKILL.md';
+const repos = ['JetBrains/first', 'JetBrains/second'];
+const github = replay({
+  ...EXAMPLE,
+  'https://api.github.com/orgs/JetBrains/repos?per_page=100&page=1': {
+    status: 200, body: repos.map((full_name) => ({ full_name, default_branch: 'main' })),
+  },
+  ...Object.fromEntries(repos.flatMap((repo) => [
+    [`https://api.github.com/repos/${repo}/commits/main`, { status: 200, body: { sha: EXAMPLE_COMMIT } }],
+    [`https://api.github.com/repos/${repo}/git/trees/${EXAMPLE_COMMIT}?recursive=1`, {
+      status: 200, body: { truncated: false, tree: [{ path: sharedPath, type: 'blob', mode: '100644' }] },
+    }],
+    [`https://raw.githubusercontent.com/${repo}/${EXAMPLE_COMMIT}/${sharedPath}`, {
+      status: 200, body: '---\nname: shared\ndescription: Shared skill.\n---\n',
+    }],
+  ])),
+});
 const server = await serve({
-  open: (input) => (parseGitHubUrl(input) ? openGitHub(input, { fetch: github, token: 'test' }) : openDirectory(input)),
+  open: (input) => openTarget(input, { fetch: github, token: 'test' }),
   port: 0,
 });
 test.after(() => server.close());
@@ -126,6 +141,30 @@ test('serve with no port: 4173', async () => {
 test('?repo=<link> in the page address: scanned at once', async () => {
   const page = await (await fetch(`${server.url}/?repo=${encodeURIComponent(FIXTURE)}`)).text();
   assert.match(page, /new URLSearchParams\(location\.search\)\.get\('repo'\)/);
+});
+
+test('an organization URL works through the same HTTP scan endpoint', async () => {
+  const { status, body } = await scan('github.com/JetBrains');
+  assert.equal(status, 200);
+  assert.equal(body.repository.id, 'JetBrains');
+  assert.deepEqual(body.skills.map((skill: Record<string, unknown>) => [skill.repository, skill.path, skill.link]),
+    repos.map((repo) => [repo, sharedPath, `https://github.com/${repo}/blob/${EXAMPLE_COMMIT}/${sharedPath}`]));
+});
+
+test('organization skill rows distinguish the same path in different repositories', async () => {
+  const page = await (await fetch(server.url)).text();
+  const { document, Event } = parseHTML(page);
+  const { body } = await scan('github.com/JetBrains');
+  runInNewContext(document.querySelector('script')!.textContent! + '\nshow(result);', {
+    document, location: { search: '' }, URLSearchParams, result: body,
+  });
+  const paths = () => Array.from(document.querySelectorAll('#skills .path') as Iterable<HTMLElement>, (row) => row.textContent);
+  assert.deepEqual(paths(), repos.map((repo) => `${repo} · ${sharedPath}`));
+
+  const filter = document.querySelector<HTMLInputElement>('#filter')!;
+  filter.value = 'JETBRAINS/SECOND shared';
+  filter.dispatchEvent(new Event('input'));
+  assert.deepEqual(paths(), [`${repos[1]} · ${sharedPath}`]);
 });
 
 test('the served page filters skills by words and resets on a new scan', async () => {

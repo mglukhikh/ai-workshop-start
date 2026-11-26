@@ -1,6 +1,6 @@
 import { AtlasError } from './errors.ts';
 import { SKILL_ROOTS } from './find.ts';
-import type { Source } from './scan.ts';
+import type { ScanTarget, Source } from './scan.ts';
 
 /** The part of `fetch` the core uses, so tests and the browser can pass their own. */
 export type Fetch = (url: string, init?: { headers?: Record<string, string> }) => Promise<Response>;
@@ -23,33 +23,87 @@ export function parseGitHubUrl(input: string): { owner: string; repo: string; re
   return match ? { owner: match[1], repo: match[2], ref: match[3] } : undefined;
 }
 
+export function parseGitHubOrganization(input: string): string | undefined {
+  return /^(?:https?:\/\/)?(?:www\.)?github\.com\/(?:orgs\/)?([a-z\d][a-z\d-]*)\/?$/i.exec(input.trim())?.[1];
+}
+
+type GitHubRepository = { full_name: string; default_branch: string; private?: boolean };
+
+export async function openGitHubTarget(input: string, options: GitHubOptions): Promise<ScanTarget> {
+  const organization = parseGitHubOrganization(input);
+  if (!organization) return openGitHub(input, options);
+  const github = client(options);
+  const url = `https://github.com/${organization}`;
+  return {
+    repository: { id: organization, organization, name: organization, url, commit: '' },
+    async *sources() {
+      const seen = new Set<string>();
+      for (let page = 1; ; page++) {
+        const notFound = `Organization not found: ${url}`;
+        const repos = await github.json<GitHubRepository[] | undefined>(
+          `${API}/orgs/${organization}/repos?per_page=100&page=${page}`,
+          notFound,
+          [404],
+          page === 1 ? 404 : undefined,
+        );
+        if (!repos) {
+          const account = await github.json<{ type: string } | undefined>(
+            `${API}/users/${organization}`, notFound, [404], 404,
+          );
+          throw new AtlasError(account?.type === 'User'
+            ? `GitHub user accounts are unsupported for organization scans: ${url}`
+            : notFound);
+        }
+        for (const repo of repos) {
+          if (seen.has(repo.full_name)) continue;
+          seen.add(repo.full_name);
+          const source = await openRepository(client(options), repo, undefined, false, true);
+          if (source) yield source;
+        }
+        if (repos.length < 100) return;
+      }
+    },
+  };
+}
+
 /** Resolves the commit, the URL's or the default branch's latest, and lists the files that may be skills. */
 export async function openGitHub(input: string, options: GitHubOptions): Promise<Source> {
   const name = parseGitHubUrl(input);
   if (!name) throw new AtlasError(`Not a GitHub repository URL: ${input}`);
   const github = client(options);
-  const info = await github.json<{ full_name: string; default_branch: string }>(
+  const info = await github.json<GitHubRepository>(
     `${API}/repos/${name.owner}/${name.repo}`,
     `Repository not found: https://github.com/${name.owner}/${name.repo}`,
   );
+  return (await openRepository(github, info, name.ref, Boolean(options.token)))!;
+}
+
+async function openRepository(
+  github: Client, info: GitHubRepository, requestedRef: string | undefined, token: boolean, organizationScan = false,
+): Promise<Source | undefined> {
   const id = info.full_name;
-  const ref = name.ref ?? info.default_branch;
-  const { sha } = await github.json<{ sha: string }>(
+  const ref = requestedRef ?? info.default_branch;
+  const commit = await github.json<{ sha: string } | undefined>(
     `${API}/repos/${id}/commits/${encodePath(ref)}`,
     `No commit or branch ${ref} in https://github.com/${id}`,
     [404, 422],
+    organizationScan ? 409 : undefined,
   );
+  if (!commit) return undefined;
+  const { sha } = commit;
   const warnings: string[] = [];
   // Code search sees only the default branch: a commit of the URL is listed through its tree.
-  const search = options.token && !name.ref;
-  const hint = name.ref ? '' : ' (GITHUB_TOKEN searches everywhere)';
+  const search = token && !requestedRef;
+  const hint = requestedRef || organizationScan ? '' : ' (GITHUB_TOKEN searches everywhere)';
   const paths = search ? await searchPaths(github, id) : await treePaths(github, id, sha, warnings, hint);
   const [organization, repo] = id.split('/');
   return {
     repository: { id, organization, name: repo, url: `https://github.com/${id}`, commit: sha },
     paths,
     warnings,
-    read: (path) => github.raw(`${RAW}/${id}/${sha}/${encodePath(path)}`),
+    read: (path) => info.private
+      ? github.raw(`${API}/repos/${id}/contents/${encodePath(path)}?ref=${sha}`, true)
+      : github.raw(`${RAW}/${id}/${sha}/${encodePath(path)}`),
   };
 }
 
@@ -116,9 +170,10 @@ function client({ fetch, token }: GitHubOptions) {
     }
   }
 
-  async function request(url: string, notFound: string, notFoundStatuses: number[]): Promise<unknown> {
+  async function request(url: string, notFound: string, notFoundStatuses: number[], emptyStatus?: number): Promise<unknown> {
     const response = await get(url, { headers });
     if (response.ok) return response.json();
+    if (response.status === emptyStatus) return undefined;
     const body: unknown = await response.json().catch(() => undefined);
     const message = (body as { message?: unknown } | undefined)?.message;
     const text = typeof message === 'string' ? message : '';
@@ -132,13 +187,13 @@ function client({ fetch, token }: GitHubOptions) {
 
   return {
     /** A GitHub API answer; `notFound` explains a 404, or the other `notFoundStatuses`. */
-    json<T>(url: string, notFound = `Not found on GitHub: ${url}`, notFoundStatuses = [404]): Promise<T> {
-      if (!answers.has(url)) answers.set(url, request(url, notFound, notFoundStatuses));
+    json<T>(url: string, notFound = `Not found on GitHub: ${url}`, notFoundStatuses = [404], emptyStatus?: number): Promise<T> {
+      if (!answers.has(url)) answers.set(url, request(url, notFound, notFoundStatuses, emptyStatus));
       return answers.get(url) as Promise<T>;
     },
     /** A file's bytes at the scanned commit, or undefined if it is not there. */
-    async raw(url: string): Promise<Uint8Array | undefined> {
-      const response = await get(url);
+    async raw(url: string, authenticated = false): Promise<Uint8Array | undefined> {
+      const response = await get(url, authenticated ? { headers: { ...headers, Accept: 'application/vnd.github.raw+json' } } : undefined);
       if (response.status === 404) return undefined;
       if (!response.ok) throw new AtlasError(`GitHub answered ${response.status} for ${url}`);
       return new Uint8Array(await response.arrayBuffer());
