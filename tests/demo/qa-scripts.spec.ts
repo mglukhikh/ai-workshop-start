@@ -22,13 +22,13 @@ test('the initial page: the field, Scan, and no skills', async ({ page }) => {
   await expect(page.locator('#status')).toHaveText('Paste a repository or organization link and press Scan.');
   await expect(page.locator('#scan')).toBeEnabled();
   await expect(page.locator('#filter')).toBeHidden();
-  await expect(page.locator('#skills li')).toHaveCount(0);
+  await expect(page.locator('#skills [role="option"]')).toHaveCount(0);
   await shot(page, 'initial-page.png');
 });
 
 test('scan the fixture, select a skill, filter the list', async ({ page, fixture }) => {
   await page.goto('/');
-  const skills = page.locator('#skills li');
+  const skills = page.locator('#skills [role="option"]');
   const skill = page.locator('#skill');
 
   await test.step('fill the field and press Scan', async () => {
@@ -50,9 +50,9 @@ test('scan the fixture, select a skill, filter the list', async ({ page, fixture
     await skills.nth(1).click();
     await expect(skills.nth(1)).toHaveAttribute('aria-selected', 'true');
     await expect(skill.locator('h2')).toHaveText('commits');
-    await expect(skill.locator('a')).toHaveText(`file://${fixture}/.claude/skills/commits/SKILL.md`);
+    await expect(skill.locator('#skill-head a')).toHaveText(`file://${fixture}/.claude/skills/commits/SKILL.md`);
     await expect(skill.locator('.path')).toHaveText('also in .github/skills/commits/SKILL.md');
-    await expect(skill.locator('pre')).toContainText('description: Write commit messages');
+    await expect(skill.locator('#text')).toContainText('description: Write commit messages');
     await shot(page, 'select-skill.png');
   });
 
@@ -102,7 +102,7 @@ test('a missing directory: the error, no skills, no filter', async ({ page }) =>
   await page.locator('#scan').click();
   await expect(page.locator('#status.error')).toHaveText('Not a GitHub URL or a readable directory: /no/such/directory');
   await expect(page.locator('#filter')).toBeHidden();
-  await expect(page.locator('#skills li')).toHaveCount(0);
+  await expect(page.locator('#skills [role="option"]')).toHaveCount(0);
   await expect(page.locator('#scan')).toBeEnabled();
   await shot(page, 'missing-directory.png');
 });

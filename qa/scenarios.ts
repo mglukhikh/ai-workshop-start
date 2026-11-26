@@ -10,7 +10,7 @@ const SCENARIOS: Record<string, (t: Tester) => Promise<void>> = {
     await t.expectText('#status', 'Paste a repository or organization link');
     await t.expectEnabled('#scan');
     await t.expectHidden('#filter');
-    await t.expectCount('#skills li', 0);
+    await t.expectCount('#skills [role="option"]', 0);
   },
 
   async 'scan-fixture'(t) {
@@ -18,8 +18,8 @@ const SCENARIOS: Record<string, (t: Tester) => Promise<void>> = {
     await t.fill('#repo', FIXTURE);
     await t.click('#scan');
     await t.expectText('#status', 'fixture · 5 skills');
-    await t.expectCount('#skills li', 5);
-    await t.expectText('#skills li:nth-child(1) .name', 'code-style');
+    await t.expectCount('#skills [role="option"]', 5);
+    await t.expectText('#skills [role="option"]:nth-child(1) .name', 'code-style');
     await t.expectText('#skill h2', 'code-style');
     await t.expectText('#warnings', 'malformed front matter');
     await t.expectText('#warnings', 'not in a skills folder');
@@ -30,12 +30,12 @@ const SCENARIOS: Record<string, (t: Tester) => Promise<void>> = {
 
   async 'select-skill'(t) {
     await t.open(`/?repo=${encodeURIComponent(FIXTURE)}`);
-    await t.expectCount('#skills li', 5);
-    await t.click('#skills li:nth-child(2)');
+    await t.expectCount('#skills [role="option"]', 5);
+    await t.click('#skills [role="option"]:nth-child(2)');
     await t.expectText('#skill h2', 'commits');
     await t.expectText('#skill', 'also in .github/skills/commits/SKILL.md');
-    await t.expectText('#skill pre', 'description:');
-    await t.expectText('#skill a', 'file://');
+    await t.expectText('#text', 'description:');
+    await t.expectText('#skill-head a', 'file://');
   },
 
   async 'press-enter'(t) {
@@ -58,22 +58,22 @@ const SCENARIOS: Record<string, (t: Tester) => Promise<void>> = {
 
   async filter(t) {
     await t.open(`/?repo=${encodeURIComponent(FIXTURE)}`);
-    await t.expectCount('#skills li', 5);
+    await t.expectCount('#skills [role="option"]', 5);
     await t.fill('#filter', 'COMMITS linter');
-    await t.expectCount('#skills li', 1);
+    await t.expectCount('#skills [role="option"]', 1);
     await t.expectText('#skill h2', 'commits');
-    await t.expectText('#skills li .path', 'tools/linter');
+    await t.expectText('#skills [role="option"] .path', 'tools/linter');
     await t.fill('#filter', 'no-such-skill');
-    await t.expectCount('#skills li', 0);
+    await t.expectCount('#skills [role="option"]', 0);
     await t.expectText('#skill', 'No matching skills.');
     await t.fill('#filter', '');
-    await t.expectCount('#skills li', 5);
+    await t.expectCount('#skills [role="option"]', 5);
     await t.fill('#filter', 'lint');
-    await t.expectCount('#skills li', 2);
+    await t.expectCount('#skills [role="option"]', 2);
     await t.click('#scan');
     await t.expectText('#status', '5 skills');
     await t.expectValue('#filter', '');
-    await t.expectCount('#skills li', 5);
+    await t.expectCount('#skills [role="option"]', 5);
   },
 
   async 'missing-directory'(t) {
@@ -82,7 +82,7 @@ const SCENARIOS: Record<string, (t: Tester) => Promise<void>> = {
     await t.click('#scan');
     await t.expectText('#status.error', 'Not a GitHub URL or a readable directory');
     await t.expectHidden('#filter');
-    await t.expectCount('#skills li', 0);
+    await t.expectCount('#skills [role="option"]', 0);
     await t.expectEnabled('#scan');
     await t.report();
   },

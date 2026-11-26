@@ -2,11 +2,16 @@
 `./skill-atlas serve [port]`: a local page, `http://127.0.0.1:<port>`; port **4173** by default, `0` any free one
 - A field for the **repository link**: a GitHub URL, `…/tree/<commit | branch>`, or a directory, as in `scan`
 - Its **skills**: name, description, path, sorted by **name**, as in `scan`
-- After a successful scan that finds skills, filter the list by typing words. Every whitespace-separated word must match a case-insensitive substring of the name, description, path, or displayed repository ID. Every occurrence of a filter word in a visible skill description is highlighted with its original casing and text color on a gold background. Overlapping matches share one highlight. Clearing the filter restores the list and removes the highlights. The first match is selected, and when there are no matches the detail pane shows a message. A new scan clears the filter. The filter stays hidden after an error or a scan with no skills. The filter stays the same single-line height as the repository field so the skill panes can use the remaining vertical space on wide screens.
-- The selected skill's **SKILL.md**, as it is, front matter included; its *pinned link*; `also in` its copies
+- A skill with copies shows a “+N copies” badge (“+1 copy” for one) next to its name
+- After a successful scan that finds skills, filter the list by typing words. Every whitespace-separated word must match a case-insensitive substring of the name, description, path, or displayed repository ID. Every occurrence of a filter word in a visible skill description is highlighted with its original casing and text color on a gold background. Overlapping matches share one highlight. Clearing the filter restores the list and removes the highlights. The first match is selected, and when there are no matches the list shows “No skill matches.” and the detail pane shows “No matching skills.”. A new scan clears the filter. The filter stays hidden after an error or a scan with no skills. The filter stays the same single-line height as the repository field so the skill panes can use the remaining vertical space on wide screens.
+- While scanning, the list shows “Scanning…”. After an error, a stopped scan without results, or a scan with no skills, it shows “No skills.” In these states, the detail pane shows “No skill selected.”
+- The selected skill's **SKILL.md**, as it is, front matter included, with line numbers; its *pinned link*; `also in` its copies
+- A **Contents** tab: the SKILL.md's `#`, `##` and `###` titles, indented by level; a title → its line in SKILL.md
+  - Not a title: in the front matter, in a fenced code block, `####` and deeper, `#text` without a space
+- Selecting a skill or switching tabs keeps focus on the activated control. Opening a title focuses its line.
 - Warnings appear under the field in a list that scrolls when it reaches 30% of the viewport height. The page displays the scan error message. The API returns scan errors with HTTP 400 for plain JSON or an `error` event with HTTP 200 for `progress=1`.
 - Each scan with warnings starts with the list expanded. **Hide warnings** collapses the list and frees its space. **Show warnings** restores it. The button is hidden while scanning or when there are no warnings.
-- The same scan as the CLI: `GET /api/scan?repo=<link>` → `{ repository, skills, warnings }`, each skill with `link` and `text`
+- The same scan as the CLI: `GET /api/scan?repo=<link>` → `{ repository, skills, warnings }`, each skill with `link`, `text` and `headings`: `{ level, title, line }`
 - `?repo=<link>` in the page's address scans at once: a link to share
 - **This machine only**: bound to `127.0.0.1`; another `Host` → 403
 - *Nothing is stored*; the server runs until stopped, Ctrl+C
