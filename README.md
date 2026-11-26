@@ -24,3 +24,4 @@ Then run `npm test`, which includes the browser layout test.
 
 - [spec/](spec/): what it does. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.
+- [qa/](qa/README.md): scripts for manual testing of the web view in a real browser.
