@@ -387,3 +387,13 @@ test('the organization deadline cancels the current request and streams partial 
     await server.close();
   }
 });
+
+test('the served atlas groups the scan controls and skill panes in a responsive layout', async () => {
+  const page = await (await fetch(server.url)).text();
+  const { document } = parseHTML(page);
+  for (const selector of ['header #form', 'main #skills', 'main #skill']) {
+    assert.ok(document.querySelector(`.atlas ${selector}`), selector);
+  }
+  assert.match(document.querySelector('style')?.textContent ?? '',
+    /@media \(max-width: 640px\)\s*\{\s*main \{ grid-template-columns: minmax\(0, 1fr\)/);
+});

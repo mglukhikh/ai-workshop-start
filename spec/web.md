@@ -22,3 +22,5 @@ The page requests newline-delimited JSON with `progress=1` to receive progress
 and then the result or error. At the 3-minute deadline it displays skills from
 completed repositories and a warning. If the client disconnects, the server
 cancels in-flight GitHub requests and stops issuing new ones.
+
+- The browser view uses a grimoire-inspired parchment palette, serif typography, and double rules. The skill list sits alongside the document on wide screens and above it in a scrollable area on narrow screens.
