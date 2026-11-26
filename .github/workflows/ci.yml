@@ -21,9 +21,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium
       - run: npm test
       # The real CLI on real GitHub repositories at fixed commits; the job's token for the rate limit.
-      - run: npm run test:e2e
+      - run: node --test tests/e2e/real.test.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
       # The real CLI on the fixture repository, as a user would run it: it must exit 0.

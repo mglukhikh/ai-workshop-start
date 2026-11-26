@@ -13,4 +13,5 @@ For changes with visible or interactive behavior, record a short demo and attach
 
 ## Commands
 - `npm ci`: first, in a fresh checkout
-- `npm test`: the tests
+- `npx playwright install --with-deps chromium`: install the browser for layout tests after installing dependencies
+- `npm test`: all tests, including Chromium layout tests

@@ -1,0 +1,71 @@
+import { strict as assert } from 'node:assert';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { chromium, expect } from '@playwright/test';
+import { serve } from '../../src/web.ts';
+import { openTarget } from '../../src/open.ts';
+
+test('the skill list and document scroll independently on desktop and stack on mobile', async (t) => {
+  const repo = mkdtempSync(join(tmpdir(), 'atlas-layout-'));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  for (let index = 1; index <= 60; index++) {
+    const name = 'skill-' + String(index).padStart(2, '0');
+    const directory = join(repo, '.agents', 'skills', name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'SKILL.md'),
+      `---\nname: ${name}\ndescription: Example skill\n---\n${'Document line\n'.repeat(120)}`);
+  }
+  execFileSync('git', ['init', '-q', repo]);
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.org', 'commit', '-qm', 'Fixture']);
+
+  const server = await serve({ open: openTarget, port: 0 });
+  t.after(() => server.close());
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.goto(`${server.url}/?repo=${encodeURIComponent(repo)}`);
+
+  const list = page.locator('#skills');
+  const document = page.locator('#skill');
+  const lastSkill = list.getByText('skill-60', { exact: true });
+  const heading = document.getByRole('heading', { name: 'skill-60' });
+  await lastSkill.click();
+  await expect(heading).toBeInViewport();
+  assert.equal(await page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY), 0);
+  const desktopList = (await list.boundingBox())!;
+  const desktopDocument = (await document.boundingBox())!;
+  assert.equal(desktopList.y, desktopDocument.y);
+  assert.ok(desktopList.x + desktopList.width <= desktopDocument.x);
+  const listScroll = await list.evaluate((pane: { scrollTop: number; scrollHeight: number }) => pane.scrollTop);
+  assert.ok(listScroll > 0);
+  assert.ok(await document.evaluate((pane: { scrollTop: number; scrollHeight: number }) => {
+    pane.scrollTop = pane.scrollHeight;
+    return pane.scrollTop > 0;
+  }));
+  assert.equal(await list.evaluate((pane: { scrollTop: number; scrollHeight: number }) => pane.scrollTop), listScroll);
+  assert.equal(await page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY), 0);
+
+  await page.setViewportSize({ width: 1280, height: 400 });
+  assert.ok((await list.boundingBox())!.height >= 200);
+  assert.ok((await document.boundingBox())!.height >= 200);
+  const middleSkill = list.getByText('skill-30', { exact: true });
+  await middleSkill.click();
+  const middleHeading = document.getByRole('heading', { name: 'skill-30' });
+  await middleHeading.scrollIntoViewIfNeeded();
+  assert.ok(await page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY) > 0);
+  await expect(middleHeading).toBeInViewport();
+
+  await page.setViewportSize({ width: 400, height: 800 });
+  const mobileList = (await list.boundingBox())!;
+  const mobileDocument = (await document.boundingBox())!;
+  assert.equal(mobileList.x, mobileDocument.x);
+  assert.ok(mobileList.y + mobileList.height <= mobileDocument.y);
+  assert.ok(await list.evaluate((pane: { scrollTop: number; scrollHeight: number }) => {
+    pane.scrollTop = pane.scrollHeight;
+    return pane.scrollTop > 0;
+  }));
+});

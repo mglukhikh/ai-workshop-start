@@ -16,8 +16,11 @@ build-tools-bump-gradle-api — Bumps the Gradle API version that Kotlin Gradle 
 `./skill-atlas scan https://github.com/JetBrains/kotlin/tree/<commit>` scans that commit.
 `./skill-atlas serve` opens a local web view at http://127.0.0.1:4173: a field for the repository
 link, its skills and their SKILL.md.
-Set `GITHUB_TOKEN` for a higher GitHub rate limit. `npm test` runs the tests; `npm run test:e2e`, the
-end-to-end tests on real GitHub repositories at fixed commits.
+Set `GITHUB_TOKEN` for a higher GitHub rate limit.
+
+After `npm ci`, install Chromium with `npx playwright install --with-deps chromium`.
+Then run `npm test`, which includes the browser layout test.
+`npm run test:e2e` runs the browser layout test and the end-to-end tests on real GitHub repositories at fixed commits.
 
 - [spec/](spec/): what it does. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.
