@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import { run } from '../src/commands.ts';
 import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
 import { replay } from '../src/core/replay.ts';
+import { outline } from '../src/core/outline.ts';
 import { openDirectory } from '../src/local.ts';
 import { serve } from '../src/web.ts';
 import { CLI, EXAMPLE, EXAMPLE_COMMIT, FIXTURE } from './helpers.ts';
@@ -33,7 +34,39 @@ test('the page: a field for the repository link, the skills, a SKILL.md', async 
   const page = await response.text();
   assert.match(page, /<input id="repo"/);
   assert.match(page, /<ul id="skills"/);
-  assert.match(page, /<section id="skill"/);
+  assert.match(page, /<section class="panel" id="skill">/);
+  // The selected skill's two tabs: its SKILL.md, and the Contents with its titles.
+  assert.match(page, /tabButton\('text', 'SKILL\.md'\), tabButton\('contents', 'Contents'/);
+});
+
+test('Contents: the #, ## and ### titles of each SKILL.md, with their lines; not in code blocks', async () => {
+  const { body } = await scan(FIXTURE);
+  const headings = Object.fromEntries(body.skills.map((skill: any) => [skill.path, skill.headings]));
+  assert.deepEqual(headings['.github/skills/code-style/SKILL.md'], [
+    { level: 1, title: 'Code style', line: 6 },
+    { level: 2, title: 'Kotlin', line: 11 },
+    { level: 3, title: 'Imports', line: 13 },
+    // `# Not a title` is in a code block, `#### Too deep…` is level 4: neither is in the contents.
+    { level: 2, title: 'Java', line: 24 },
+  ]);
+  assert.deepEqual(headings['tools/linter/.claude/skills/lint/SKILL.md'], [{ level: 1, title: 'Lint', line: 6 }]);
+  // Malformed front matter: the titles are still there.
+  assert.deepEqual(headings['.agents/skills/release-checklist/SKILL.md'], [{ level: 1, title: 'Release checklist', line: 6 }]);
+});
+
+test('Contents: Markdown title rules; none → an empty list', () => {
+  const text = [
+    '---', 'description: "# not a title: front matter"', '---',
+    '#hashtag, not a title', '  ## Indented ##  ', '    # four spaces: code', '#', '###',
+    '~~~', '# in a ~~~ block', '```', '# still in it: ``` does not close ~~~', '~~~',
+    '### After the block',
+  ].join('\n') + '\r\n# Windows line ending\r\n';
+  assert.deepEqual(outline(text), [
+    { level: 2, title: 'Indented', line: 5 },
+    { level: 3, title: 'After the block', line: 14 },
+    { level: 1, title: 'Windows line ending', line: 15 },
+  ]);
+  assert.deepEqual(outline('---\nname: x\n---\nNo titles.\n'), []);
 });
 
 test('a GitHub link: its skills, each with its pinned link and its SKILL.md', async () => {

@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { AtlasError } from './core/errors.ts';
 import { skillLink } from './core/model.ts';
+import { outline } from './core/outline.ts';
 import { scan, type Source } from './core/scan.ts';
 
 export type WebOptions = {
@@ -48,7 +49,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
     if (!repo) return send(response, 400, { error: 'A GitHub URL or a directory, please' });
     try {
       const result = await scan(await open(repo));
-      const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) }));
+      const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill), headings: outline(skill.text) }));
       return send(response, 200, { repository: result.repository, skills, warnings: result.warnings });
     } catch (error) {
       if (error instanceof AtlasError) return send(response, 400, { error: error.message });
