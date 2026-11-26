@@ -65,16 +65,24 @@
     $('filter').value = '';
     setStatus(`Scanning ${repo}…`);
     try {
-      const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}`, {
-        signal: AbortSignal.timeout(60_000),
-      });
-      const result = await response.json();
-      if (!response.ok) return setStatus(result.error, true);
-      show(result);
+      const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}&progress=1`);
+      if (!response.ok) return setStatus((await response.json()).error, true);
+      let pending = '';
+      for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
+        pending += chunk;
+        const lines = pending.split('\n');
+        pending = lines.pop();
+        for (const line of lines) {
+          const event = JSON.parse(line);
+          if (event.error) return setStatus(event.error, true);
+          if (event.result) return show(event.result);
+          const { id, completed } = event.progress;
+          setStatus(`Scanned ${completed} ${completed === 1 ? 'repository' : 'repositories'} · ${id}`);
+        }
+      }
+      setStatus('The scan ended before returning results.', true);
     } catch (error) {
-      setStatus(error.name === 'TimeoutError'
-        ? 'The scan did not finish within one minute. Try scanning a single repository.'
-        : `Cannot reach the Skill Atlas server: ${error.message}`, true);
+      setStatus(`Cannot reach the Skill Atlas server: ${error.message}`, true);
     } finally {
       $('scan').disabled = false;
       $('scan').textContent = 'Scan';

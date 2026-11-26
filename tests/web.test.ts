@@ -33,7 +33,7 @@ const github = replay({
   ])),
 });
 const server = await serve({
-  open: (input) => openTarget(input, { fetch: github, token: 'test' }),
+  open: (input, options) => openTarget(input, { fetch: github, token: 'test', ...options }),
   port: 0,
 });
 test.after(() => server.close());
@@ -171,7 +171,7 @@ test('the served page filters skills by words and resets on a new scan', async (
   const page = await (await fetch(server.url)).text();
   const { document, Event } = parseHTML(page);
   const context = {
-    document, URLSearchParams, AbortSignal, location: { search: '' },
+    document, URLSearchParams, TextDecoderStream, location: { search: '' },
     fetch: (path: string) => fetch(server.url + path),
   };
   runInNewContext(document.querySelector('script')!.textContent!, context);
@@ -210,29 +210,80 @@ test('the served page filters skills by words and resets on a new scan', async (
   assert.deepEqual(names(), []);
 });
 
-test('the served page shows a pending scan and recovers after a timeout', async () => {
+test('the served page shows organization progress before the final result', async () => {
   const { document } = parseHTML(await (await fetch(server.url)).text());
-  const { promise, reject } = Promise.withResolvers<Response>();
-  const signal = new AbortController().signal;
-  const context = {
-    document, URLSearchParams, location: { search: '' },
-    AbortSignal: { timeout: (ms: number) => { assert.equal(ms, 60_000); return signal; } },
-    fetch: (path: string, options: RequestInit) => {
-      assert.equal(path, '/api/scan?repo=https%3A%2F%2Fgithub.com%2FJetBrains');
-      assert.equal(options.signal, signal);
-      return promise;
-    },
-  };
+  const reader = (await fetch(`${server.url}/api/scan?repo=github.com/JetBrains&progress=1`))
+    .body!.pipeThrough(new TextDecoderStream()).getReader();
+  const { readable, writable } = new TransformStream<string, Uint8Array>({
+    transform(chunk, controller) { controller.enqueue(new TextEncoder().encode(chunk)); },
+  });
+  const writer = writable.getWriter();
+  const status = document.querySelector('#status')!;
+  const { promise: progressShown, resolve } = Promise.withResolvers<void>();
+  new document.defaultView.MutationObserver(() => {
+    if (status.textContent?.includes('Scanned 1 repository')) resolve();
+  }).observe(status, { childList: true });
   const pending = runInNewContext(
-    document.querySelector('script')!.textContent! + '\nscan("https://github.com/JetBrains");', context,
+    document.querySelector('script')!.textContent! + '\nscan("https://github.com/JetBrains");',
+    { document, URLSearchParams, TextDecoderStream, location: { search: '' }, fetch: async () => new Response(readable) },
   );
   const button = document.querySelector('#scan')!;
   assert.equal(button.textContent, 'Scanning…');
   assert.equal(Reflect.get(button, 'disabled'), true);
-  assert.match(document.querySelector('#status')!.textContent!, /Scanning https:\/\/github.com\/JetBrains/);
-  reject(new DOMException('Timed out', 'TimeoutError'));
+  let events = '';
+  while (!events.includes('\n')) events += (await reader.read()).value;
+  const newline = events.indexOf('\n');
+  assert.deepEqual(JSON.parse(events.slice(0, newline)), { progress: { id: repos[0], completed: 1 } });
+  await writer.write(events.slice(0, newline + 1));
+  await progressShown;
+  await writer.write(events.slice(newline + 1));
+  for (let next = await reader.read(); !next.done; next = await reader.read()) await writer.write(next.value);
   await pending;
-  assert.match(document.querySelector('#status')!.textContent!, /did not finish within one minute/);
-  assert.equal(button.textContent, 'Scan');
+  assert.match(status.textContent!, /JetBrains · 2 skills/);
   assert.equal(Reflect.get(button, 'disabled'), false);
+});
+
+test('disconnecting aborts the in-flight GitHub request and stops the scan', { timeout: 5000 }, async () => {
+  const started = Promise.withResolvers<void>();
+  const cancelled = Promise.withResolvers<void>();
+  const finished = Promise.withResolvers<void>();
+  let calls = 0;
+  const server = await serve({
+    port: 0,
+    open: async (input, options) => {
+      const target = await openTarget(input, {
+        ...options,
+        fetch: async (_url, init) => {
+          calls++;
+          if (calls === 1) return Response.json(repos.map((full_name) => ({ full_name, default_branch: 'main' })));
+          started.resolve();
+          return new Promise((_, reject) => init!.signal!.addEventListener('abort', () => {
+            cancelled.resolve();
+            reject(init!.signal!.reason);
+          }, { once: true }));
+        },
+      });
+      assert.ok('sources' in target);
+      return {
+        repository: target.repository,
+        async *sources() {
+          try { yield* target.sources(); }
+          finally { finished.resolve(); }
+        },
+      };
+    },
+  });
+  const controller = new AbortController();
+  try {
+    const response = await fetch(`${server.url}/api/scan?repo=github.com/JetBrains&progress=1`, { signal: controller.signal });
+    await started.promise;
+    controller.abort();
+    await assert.rejects(response.text(), { name: 'AbortError' });
+    await cancelled.promise;
+    await finished.promise;
+    assert.equal(calls, 2);
+  } finally {
+    controller.abort();
+    await server.close();
+  }
 });

@@ -4,12 +4,13 @@ import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { AtlasError } from './core/errors.ts';
+import type { GitHubOptions } from './core/github.ts';
 import { skillLink } from './core/model.ts';
 import { scan, type ScanTarget } from './core/scan.ts';
 
 export type WebOptions = {
   /** Opens what the user asked to scan, as the CLI does. */
-  open(input: string): Promise<ScanTarget>;
+  open(input: string, options: Pick<GitHubOptions, 'signal' | 'onRepositoryScanned'>): Promise<ScanTarget>;
   /** 0: any free port. */
   port: number;
 };
@@ -46,14 +47,36 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
   if (url.pathname === '/api/scan') {
     const repo = url.searchParams.get('repo')?.trim();
     if (!repo) return send(response, 400, { error: 'A GitHub URL or a directory, please' });
-    try {
-      const result = await scan(await open(repo));
-      const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) }));
-      return send(response, 200, { repository: result.repository, skills, warnings: result.warnings });
-    } catch (error) {
-      if (error instanceof AtlasError) return send(response, 400, { error: error.message });
-      throw error;
+    const controller = new AbortController();
+    response.once('close', () => controller.abort());
+    const stream = url.searchParams.get('progress') === '1';
+    const write = (event: unknown) => {
+      if (!controller.signal.aborted) response.write(JSON.stringify(event) + '\n');
+    };
+    if (stream) {
+      response.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8' });
+      response.flushHeaders();
     }
+    try {
+      const result = await scan(await open(repo, {
+        signal: controller.signal,
+        onRepositoryScanned: stream ? (id, completed) => write({ progress: { id, completed } }) : undefined,
+      }));
+      if (controller.signal.aborted) return;
+      const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) }));
+      const body = { repository: result.repository, skills, warnings: result.warnings };
+      if (!stream) return send(response, 200, body);
+      write({ result: body });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (!stream) {
+        if (error instanceof AtlasError) return send(response, 400, { error: error.message });
+        throw error;
+      }
+      write({ error: error instanceof AtlasError ? error.message : 'Unexpected scan error' });
+    }
+    response.end();
+    return;
   }
   send(response, 404, { error: 'Not found' });
 }
