@@ -43,4 +43,5 @@ scan ends with a result event containing the partial results and warnings.
 
 The demo tests check Linux Chromium against pixel-exact baselines using vendored
 fonts configured through fontconfig. On other platforms the demo tests are skipped,
-including when running the suite in screenshot update mode.
+including when running the suite in screenshot update mode. Demo specs inherit
+this guard by importing `test` from the shared demo fixture.

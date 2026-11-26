@@ -13,6 +13,7 @@ export const FIXTURE = '/tmp/skill-atlas-demo/fixture';
 const SOURCE = fileURLToPath(new URL('../../fixture', import.meta.url));
 
 type Fixtures = {
+  linuxOnly: void;
   /** The answers GitHub gives; set with `test.use({ recording })`. */
   recording: Recording;
   /** The `GITHUB_TOKEN` the server scans with; `''` for none. */
@@ -24,6 +25,10 @@ type Fixtures = {
 };
 
 export const test = base.extend<Fixtures>({
+  linuxOnly: [async ({}, use, testInfo) => {
+    testInfo.skip(process.platform !== 'linux', 'Demo screenshots require Linux fontconfig.');
+    await use();
+  }, { auto: true }],
   recording: [{}, { option: true }],
   token: ['test', { option: true }],
   github: async ({ recording }, use) => use(new SimulatedGitHub(recording)),

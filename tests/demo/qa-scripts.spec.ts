@@ -2,8 +2,6 @@
 // Scan, select a skill, filter, and an error, as qa/scenarios.ts does by hand.
 import { expect, shot, test } from './fixtures.ts';
 
-test.skip(process.platform !== 'linux', 'Demo screenshots require Linux fontconfig.');
-
 test('the page renders with the pinned fonts only', async ({ page }) => {
   await page.goto('/');
   const cdp = await page.context().newCDPSession(page);
