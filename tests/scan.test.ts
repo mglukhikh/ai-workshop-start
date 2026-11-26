@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { openGitHub } from '../src/core/github.ts';
+import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
 import { parseSkill } from '../src/core/parse.ts';
 import { replay } from '../src/core/replay.ts';
 import type { Recording } from '../src/core/replay.ts';
@@ -190,6 +190,47 @@ test('GitHub, no token, a tree too large → only the root skills folders; symbo
       'warning: not in a skills folder, so not a skill: .claude/skills/commits/examples/SKILL.md',
     ].join('\n'),
   );
+});
+
+test('a commit in the URL: its tree, even with a token, and links pinned to it', async () => {
+  const answers: Recording = {
+    // Not the default branch: the URL's commit. No code search is recorded, so it must not be asked.
+    [`https://api.github.com/repos/JetBrains/pinned/commits/${COMMIT}`]: { status: 200, body: { sha: COMMIT } },
+    [`https://api.github.com/repos/JetBrains/pinned/git/trees/${COMMIT}?recursive=1`]: {
+      status: 200,
+      body: { truncated: false, tree: [{ path: '.claude/skills/eel/SKILL.md', mode: '100644', type: 'blob', sha: 'e' }] },
+    },
+  };
+  const recording = repository('pinned', answers, { '.claude/skills/eel/SKILL.md': skill('eel', 'Use EEL APIs.') });
+  delete recording['https://api.github.com/repos/JetBrains/pinned/commits/main'];
+  const result = await atlas(['scan', `github.com/JetBrains/pinned/tree/${COMMIT}`], { recording });
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(
+    result.stdout,
+    ['JetBrains/pinned · 1 skill', 'eel — Use EEL APIs.', `  https://github.com/JetBrains/pinned/blob/${COMMIT}/.claude/skills/eel/SKILL.md`].join('\n'),
+  );
+  assert.equal(result.stderr, '');
+});
+
+test('GitHub URLs: with or without the scheme, .git, a trailing slash, a commit or a branch', () => {
+  assert.deepEqual(parseGitHubUrl('github.com/JetBrains/MPS'), { owner: 'JetBrains', repo: 'MPS', ref: undefined });
+  assert.deepEqual(parseGitHubUrl('https://www.github.com/JetBrains/MPS.git/'), { owner: 'JetBrains', repo: 'MPS', ref: undefined });
+  assert.deepEqual(parseGitHubUrl(`https://github.com/JetBrains/MPS/tree/${COMMIT}/`), { owner: 'JetBrains', repo: 'MPS', ref: COMMIT });
+  assert.deepEqual(parseGitHubUrl('github.com/JetBrains/MPS/tree/release/2025.3'), { owner: 'JetBrains', repo: 'MPS', ref: 'release/2025.3' });
+  assert.equal(parseGitHubUrl('github.com/JetBrains/MPS/blob/master/README.md'), undefined);
+});
+
+test('unknown commit or branch → a clear message, exit code 1', async () => {
+  const recording = repository('pinned', {
+    // What GitHub answers for a commit that is not there, and for a branch that is not there.
+    'https://api.github.com/repos/JetBrains/pinned/commits/0000000': { status: 422, body: { message: 'No commit found for SHA: 0000000' } },
+    'https://api.github.com/repos/JetBrains/pinned/commits/no-such-branch': { status: 404, body: { message: 'Not Found' } },
+  }, {});
+  for (const ref of ['0000000', 'no-such-branch']) {
+    const result = await atlas(['scan', `https://github.com/JetBrains/pinned/tree/${ref}`], { recording });
+    assert.equal(result.code, 1);
+    assert.equal(result.stderr, `No commit or branch ${ref} in https://github.com/JetBrains/pinned`);
+  }
 });
 
 test('the CLI prints the result at once and stores nothing', (t) => {
