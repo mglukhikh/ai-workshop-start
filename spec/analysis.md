@@ -10,6 +10,8 @@ Skill: id = `repo:path`, name, description, commit
 - **GitHub API**, no clone; *under 5 s* for intellij-community
 - The name: front matter, else the directory
 - The link pins the *scanned commit*
+- A commit or branch in the URL → its tree, even with `GITHUB_TOKEN`: code search sees only the default branch
+- Unknown commit or branch → a clear message, exit code 1
 - Malformed front matter → a *warning*, the scan goes on
 - Unreachable repository → a clear message, exit code 1
 ## Project skill
@@ -22,4 +24,4 @@ Skill: id = `repo:path`, name, description, commit
   - Original not at the scanned commit → the next copy, with a warning
 - One name in two projects → *two* skills
 - Symbolic links are not followed: the target is the skill
-- No `GITHUB_TOKEN` and a tree too large for one answer → only the root's skills folders, with a warning
+- Listed through the tree, and the tree too large for one answer → only the root's skills folders, with a warning
