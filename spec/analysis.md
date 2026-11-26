@@ -31,8 +31,8 @@ Skill: id = `repo:path`, name, description, commit, the SKILL.md text
 - List every page of repositories visible to the scan credentials, including private repositories accessible with `GITHUB_TOKEN`.
 - Scan each repository's default-branch commit by tree. If the recursive listing is truncated, scan only the root’s skills folders and warn. Skip empty repositories.
 - Combine skills across repositories, retaining their repository IDs and pinned links. Prefix warnings with the repository ID.
-- Report an error if the organization cannot be listed or a repository scan fails.
+- Report an error if the organization cannot be listed or a repository scan fails for a reason other than rate limiting.
 - A GitHub user account URL reports that user accounts are unsupported for organization scans.
-- If GitHub reports fewer remaining requests than twice the number of unscanned repositories on a listing page, stop before scanning that page and explain how to retry.
 - GitHub requests have a 15-second timeout that includes reading the response body. A timeout produces a GitHub connection error.
-- Web organization scans have a 3-minute deadline. At that deadline, return skills and warnings from completed repositories with a partial-results warning.
+- Web organization scans have a 5-minute deadline. At that deadline, return skills and warnings from completed repositories with a partial-results warning.
+- If GitHub rate-limits an organization scan, stop and return skills and warnings from completed repositories with a rate-limit warning. This includes HTTP 429 on raw skill reads and HTTP 403 with a Retry-After header on API requests.

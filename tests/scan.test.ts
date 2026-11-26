@@ -374,18 +374,53 @@ test('a failed repository scan reports an error for the organization', async () 
   assert.match(result.stderr, /GitHub answered 500 .*\/repos\/JetBrains\/huge\/git\/trees\//);
 });
 
-test('an organization scan stops before visiting repositories when the request budget is insufficient', async () => {
+test('an organization rate-limited before listing returns an empty partial result', async () => {
   const target = await openGitHubTarget('https://github.com/JetBrains', {
-    fetch: async (url, init) => {
+    fetch: async (url) => {
       assert.equal(url, 'https://api.github.com/orgs/JetBrains/repos?per_page=100&page=1');
-      assert.ok(init?.signal);
-      return Response.json([{ full_name: 'JetBrains/first', default_branch: 'main' }], {
-        headers: { 'x-ratelimit-remaining': '1' },
-      });
+      return new Response(null, { status: 429 });
     },
   });
-  await assert.rejects(scan(target), { message: /set GITHUB_TOKEN/ });
+  const result = await scan(target);
+  assert.deepEqual(result.skills, []);
+  assert.deepEqual(result.warnings, [
+    'GitHub rate limit reached; set GITHUB_TOKEN. Showing results from completed repositories.',
+  ]);
 });
+
+for (const { name, endpoint, status, headers } of [
+  { name: 'a raw file read returns 429', endpoint: 'raw', status: 429 },
+  { name: 'an API request returns 403 with Retry-After', endpoint: 'tree', status: 403, headers: { 'retry-after': '60' } },
+]) {
+  test(`an organization scan returns partial results when ${name}`, async () => {
+    const path = '.agents/skills/shared/SKILL.md';
+    const limitedUrl = endpoint === 'raw'
+      ? `https://raw.githubusercontent.com/JetBrains/second/${COMMIT}/${path}`
+      : `https://api.github.com/repos/JetBrains/second/git/trees/${COMMIT}?recursive=1`;
+    const target = await openGitHubTarget('github.com/JetBrains', {
+      fetch: async (url) => {
+        if (url === limitedUrl) return new Response(null, { status, headers });
+        if (url.includes('/orgs/')) {
+          return Response.json(['first', 'second'].map((repo) => ({
+            full_name: `JetBrains/${repo}`, default_branch: 'main',
+          })));
+        }
+        if (url.includes('/commits/')) return Response.json({ sha: COMMIT });
+        if (url.includes('/git/trees/')) {
+          return Response.json({ tree: [{ path, type: 'blob', mode: '100644' }] });
+        }
+        assert.equal(url, `https://raw.githubusercontent.com/JetBrains/first/${COMMIT}/${path}`);
+        return new Response(skill('shared', 'Shared skill.'));
+      },
+    });
+
+    const result = await scan(target);
+    assert.deepEqual(result.skills.map((item) => item.repository), ['JetBrains/first']);
+    assert.deepEqual(result.warnings, [
+      'GitHub rate limit reached; set GITHUB_TOKEN. Showing results from completed repositories.',
+    ]);
+  });
+}
 
 test('a GitHub timeout while reading a response body produces an AtlasError', async (t) => {
   const abort = new AbortController();

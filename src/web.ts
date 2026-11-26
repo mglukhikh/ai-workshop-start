@@ -60,7 +60,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
     try {
       const result = await scan(await open(repo, {
         signal: controller.signal,
-        organizationTimeoutMs: 180_000,
+        organizationTimeoutMs: 300_000,
         onOrganizationProgress: stream ? (progress) => write({ progress }) : undefined,
       }));
       if (controller.signal.aborted) return;
