@@ -5,6 +5,7 @@
 # has conflicts, and a manual run needs the workflow on the default branch. It changes no branch:
 # download the `demo-baselines` artifact into tests/demo, review the images and commit them:
 #   gh run download <run id> -n demo-baselines -D tests/demo
+# After a full demo run, review and remove obsolete frame PNGs reported as STALE by test:frames.
 name: Demo baselines
 on:
   workflow_dispatch:

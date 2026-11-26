@@ -41,7 +41,9 @@ The baselines for both the screenshots and the frames are made in the cloud on C
 Add the `update-baselines` label to a pull request, run the *Demo baselines* workflow, or push a
 commit whose message contains `[update-baselines]`.
 Then download its artifact into `tests/demo`, review the images and commit them:
-`gh run download <run id> -n demo-baselines -D tests/demo`. Video encoding depends on the ffmpeg
+`gh run download <run id> -n demo-baselines -D tests/demo`. After a full demo run, run `npm run test:frames`
+and remove any obsolete baseline PNGs it reports as `STALE` before committing.
+Update mode preserves PNGs for moments absent from the current run. Video encoding depends on the ffmpeg
 build, so a local comparison against the cloud frames can report differences that CI does not.
 
 Run only one demo suite per machine at a time, even across checkouts. Each run

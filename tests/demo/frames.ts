@@ -212,6 +212,7 @@ async function main() {
     process.exit(2);
   }
   rmSync(OUT, { recursive: true, force: true });
+  mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.goto('about:blank');
@@ -219,6 +220,7 @@ async function main() {
   const expected = new Set<string>();
   try {
     for (const { directory, moments } of runs) {
+      for (const moment of moments.moments) expected.add(join(moments.file, moment.name));
       const video = join(directory, 'video.webm');
       const base = { file: moments.file, title: moments.title };
       if (!existsSync(video)) {
@@ -228,7 +230,6 @@ async function main() {
       const { duration, frames } = await extractFrames(page, video, moments.moments.map((moment) => moment.seconds));
       for (const [index, moment] of moments.moments.entries()) {
         const key = join(moments.file, moment.name);
-        expected.add(key);
         const result: Result = { ...base, name: moment.name, seconds: moment.seconds, status: 'same', regions: [], changedPixels: 0 };
         results.push(result);
         const actualPath = join(OUT, key);
@@ -255,7 +256,6 @@ async function main() {
   const stale = existsSync(BASELINES)
     ? readdirSync(BASELINES, { recursive: true, encoding: 'utf8' }).filter((path) => path.endsWith('.png') && !expected.has(path)).sort()
     : [];
-  if (update) for (const path of stale) rmSync(join(BASELINES, path));
 
   const failed = results.filter((result) => !['same', 'updated', 'new'].includes(result.status));
   const markdown = report(results, update ? [] : stale, update);
@@ -268,7 +268,7 @@ async function main() {
     console.log(`${mark.padEnd(11)} ${result.file} › ${result.name}${result.note ? ` (${result.note})` : ''}${changed}`);
     result.regions.forEach((region, index) => console.log(`            ${describe(region, index)}`));
   }
-  for (const path of stale) console.log(`${update ? 'REMOVED' : 'STALE'}     ${path}: no test has this moment`);
+  if (!update) for (const path of stale) console.log(`STALE      ${path}: no test has this moment`);
   console.log(`Report: ${relative(ROOT, join(OUT, 'report.html'))}`);
   process.exitCode = failed.length > 0 || (!update && stale.length > 0) ? 1 : 0;
 }
