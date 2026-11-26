@@ -19,7 +19,7 @@ completed repository count (including empty repositories), and the current
 repository below the bar. The bar is indeterminate until a total is available. For paginated listings, GitHub’s last-page link
 provides an upper bound. The final short page supplies the exact total.
 The page requests newline-delimited JSON with `progress=1` to receive progress
-and then the result or error. At the 5-minute deadline or when GitHub rate-limits the scan, it displays skills from
+and then a result, error, or stopped event. At the 5-minute deadline or when GitHub rate-limits the scan, it displays skills from
 completed repositories and a warning. If the client disconnects, the server
 cancels in-flight GitHub requests and stops issuing new ones.
 
@@ -28,3 +28,12 @@ cancels in-flight GitHub requests and stops issuing new ones.
 While a scan is active, **Stop Scanning** cancels in-flight GitHub requests.
 For an organization, the page displays skills and warnings from completed
 repositories. The progress indicators clear and Scan becomes available again.
+
+The page supplies a unique `id` with each `GET /api/scan?repo=<link>&progress=1`
+request. The ID is optional for streaming API clients. Reusing an active ID
+returns HTTP 409. `POST /api/stop?id=<id>` cancels the matching active scan and
+returns HTTP 204, including when the ID is unknown or omitted.
+
+A stopped single-repository scan ends the stream with `{"stopped":true}`.
+The page shows **Scan stopped.** and displays no results. A stopped organization
+scan ends with a result event containing the partial results and warnings.
