@@ -32,7 +32,7 @@ export type Skill = {
  */
 export function skillLink(repository: Repository, skill: Skill): string {
   const path = skill.path.split('/').map(encodeURIComponent).join('/');
-  return skill.commit ? `${repository.url}/blob/${skill.commit}/${path}` : `${repository.url}/${path}`;
+  return skill.commit ? `https://github.com/${skill.repository}/blob/${skill.commit}/${path}` : `${repository.url}/${path}`;
 }
 
 /** By name, then by path: the same order everywhere, whatever the locale. */

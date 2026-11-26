@@ -1,9 +1,8 @@
 // Runs the commands the way the CLI does, with GitHub answering from EXAMPLE below.
 import { fileURLToPath } from 'node:url';
 import { run } from '../src/commands.ts';
-import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
 import { replay, type Recording } from '../src/core/replay.ts';
-import { openDirectory } from '../src/local.ts';
+import { openTarget } from '../src/open.ts';
 
 export const FIXTURE = fileURLToPath(new URL('../fixture', import.meta.url));
 export const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
@@ -35,7 +34,7 @@ export async function atlas(args: string[], { recording = EXAMPLE, token: withTo
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = await run(args, {
-    open: (input) => (parseGitHubUrl(input) ? openGitHub(input, { fetch: github, token }) : openDirectory(input)),
+    open: (input) => openTarget(input, { fetch: github, token }),
     print: (text) => stdout.push(text),
     error: (text) => stderr.push(text),
   });

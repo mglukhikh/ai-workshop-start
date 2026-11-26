@@ -13,10 +13,22 @@ export type Source = {
   read(path: string): Promise<Uint8Array | undefined>;
 };
 
+export type ScanTarget = Source | { repository: Repository; sources(): AsyncIterable<Source> };
+
 export type ScanResult = { repository: Repository; skills: Skill[]; warnings: string[] };
 
 /** fetch → find → parse. Nothing is stored: the result is all there is. */
-export async function scan(source: Source): Promise<ScanResult> {
+export async function scan(source: ScanTarget): Promise<ScanResult> {
+  if ('sources' in source) {
+    const skills: Skill[] = [];
+    const warnings: string[] = [];
+    for await (const repository of source.sources()) {
+      const result = await scan(repository);
+      for (const skill of result.skills) skills.push(skill);
+      for (const warning of result.warnings) warnings.push(`${repository.repository.id}: ${warning}`);
+    }
+    return { repository: source.repository, skills: sortSkills(skills), warnings };
+  }
   const found = findSkills(source.paths);
   // The skills are read at the same time: on GitHub, each file is a request.
   const results = await Promise.all(found.skills.map((file) => readSkill(source, file)));
