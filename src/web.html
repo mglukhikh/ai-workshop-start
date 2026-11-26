@@ -28,7 +28,7 @@
     max-width: 1120px;
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - clamp(24px, 8vw, 96px));
+    height: calc(100vh - clamp(24px, 8vw, 96px));
     background: radial-gradient(ellipse at center, var(--paper) 40%, #eedab0);
     border: 4px double #9d7645;
     box-shadow: 0 12px 40px #160e16a0;
@@ -48,18 +48,19 @@
   #scan-progress, #filter { margin: 0 16px 8px; width: calc(100% - 32px); accent-color: var(--accent); }
   #status.error { color: var(--accent); }
   #warnings { flex: none; max-height: 30vh; overflow: auto; margin: 0; padding: 0 16px 0 32px; color: #754318; font-size: 14px; }
-  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); border-top: 1px solid var(--border); }
-  #skills { list-style: none; margin: 0; padding: 0; border-right: 4px double var(--border); overflow-wrap: anywhere; }
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); border-top: 1px solid var(--border); }
+  #skills { list-style: none; margin: 0; padding: 0; border-right: 4px double var(--border); overflow: auto; overflow-wrap: anywhere; }
   #skills li { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); }
   #skills li:hover { background: #782e350e; }
   #skills li[aria-selected="true"] { background: #782e3517; box-shadow: inset 4px 0 var(--accent); }
   .name { font-weight: 700; color: var(--accent); }
   .description, .path { font-size: 14px; color: var(--muted); }
-  #skill { padding: 16px clamp(16px, 3vw, 32px); min-width: 0; overflow-wrap: anywhere; }
+  #skill { padding: 16px clamp(16px, 3vw, 32px); min-width: 0; overflow: auto; overflow-wrap: anywhere; }
   #skill h2 { margin: 0 0 8px; color: var(--accent); }
   #skill a { font-size: 14px; color: var(--accent); }
   #skill pre { white-space: pre-wrap; font: 13px/1.55 ui-monospace, monospace; border: 1px solid var(--border); background: var(--paper); padding: 14px; }
   @media (max-width: 640px) {
+    .atlas { height: auto; min-height: calc(100vh - clamp(24px, 8vw, 96px)); }
     main { grid-template-columns: minmax(0, 1fr); }
     #skills { border-right: 0; max-height: 40vh; overflow: auto; }
   }
