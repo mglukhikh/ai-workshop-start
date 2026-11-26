@@ -49,7 +49,7 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
             const remaining = response.headers.get('x-ratelimit-remaining');
             const unscanned = new Set((repositories as GitHubRepository[])
               .map((repo) => repo.full_name).filter((id) => !seen.has(id)));
-            if (remaining !== null && unscanned.size > Number(remaining)) {
+            if (remaining !== null && 2 * unscanned.size > Number(remaining)) {
               throw new AtlasError(options.token
                 ? 'GitHub rate limit too low to scan this organization; try again after it resets'
                 : 'GitHub rate limit too low to scan this organization; set GITHUB_TOKEN and retry');

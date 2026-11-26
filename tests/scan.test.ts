@@ -379,7 +379,7 @@ test('an organization scan stops before visiting repositories when the request b
       assert.equal(url, 'https://api.github.com/orgs/JetBrains/repos?per_page=100&page=1');
       assert.ok(init?.signal);
       return Response.json([{ full_name: 'JetBrains/first', default_branch: 'main' }], {
-        headers: { 'x-ratelimit-remaining': '0' },
+        headers: { 'x-ratelimit-remaining': '1' },
       });
     },
   });
