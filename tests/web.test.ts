@@ -108,7 +108,7 @@ test('the served page displays the streamed scan error', async () => {
   await runInNewContext(
     document.querySelector('script')!.textContent! + '\nscan(missing);',
     {
-      document, missing, URLSearchParams, TextDecoderStream, location: { search: '' },
+      document, missing, crypto, URLSearchParams, TextDecoderStream, location: { search: '' },
       fetch: async (path: string) => {
         const url = new URL(path, server.url);
         assert.equal(url.searchParams.get('progress'), '1');
@@ -215,7 +215,7 @@ test('the served page filters skills by words and resets on a new scan', async (
   const page = await (await fetch(server.url)).text();
   const { document, Event } = parseHTML(page);
   const context = {
-    document, URLSearchParams, TextDecoderStream, location: { search: '' },
+    document, crypto, URLSearchParams, TextDecoderStream, location: { search: '' },
     fetch: (path: string) => fetch(server.url + path),
   };
   runInNewContext(document.querySelector('script')!.textContent!, context);
@@ -269,7 +269,7 @@ test('the served page shows organization progress before the final result', asyn
   }).observe(status, { childList: true });
   const pending = runInNewContext(
     document.querySelector('script')!.textContent! + '\nscan("https://github.com/JetBrains");',
-    { document, URLSearchParams, TextDecoderStream, location: { search: '' }, fetch: async () => new Response(readable) },
+    { document, crypto, URLSearchParams, TextDecoderStream, location: { search: '' }, fetch: async () => new Response(readable) },
   );
   const button = document.querySelector('#scan')!;
   assert.equal(button.textContent, 'Scanning…');
@@ -411,5 +411,46 @@ test('an organization scan uses the remaining quota and streams partial results 
     assert.match(result.warnings.at(-1), /GitHub rate limit reached.*Showing results from completed repositories/);
   } finally {
     await server.close();
+  }
+});
+
+test('Stop Scanning cancels the current GitHub request and displays completed repositories', { timeout: 15_000 }, async (t) => {
+  const { chromium, expect } = await import('@playwright/test');
+  let cancelled = false;
+  const server = await serve({
+    port: 0,
+    open: (input, options) => openTarget(input, {
+      ...options,
+      fetch: (url, init) => {
+        if (!url.includes(`/repos/${repos[1]}/`)) return github(url, init);
+        return new Promise((_, reject) => {
+          const signal = init!.signal!;
+          signal.addEventListener('abort', () => {
+            cancelled = true;
+            reject(signal.reason);
+          }, { once: true });
+        });
+      },
+    }),
+  });
+  t.after(() => server.close());
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(`${server.url}/?repo=github.com/JetBrains`);
+    await expect(page.locator('#current-repository')).toHaveText(`Scanning ${repos[1]}…`);
+    const stop = page.getByRole('button', { name: 'Stop Scanning' });
+    await stop.click();
+    await expect(page.locator('#warnings')).toContainText('Scan stopped.');
+    await expect(page.locator('#skills')).toContainText(repos[0]);
+    await expect(page.locator('#skills')).not.toContainText(repos[1]);
+    await expect(stop).toBeHidden();
+    await expect(page.locator('#scan-progress')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Scan', exact: true })).toBeEnabled();
+    assert.equal(cancelled, true);
+  } finally {
+    await context.close();
   }
 });
