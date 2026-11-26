@@ -8,6 +8,7 @@ export type Fetch = (url: string, init?: { headers?: Record<string, string>; sig
 export type GitHubOptions = {
   fetch: Fetch;
   signal?: AbortSignal;
+  organizationTimeoutMs?: number;
   onOrganizationProgress?(progress: { completed: number; total?: number; current?: string }): void;
   /** With a token, skills are found through code search; without it, through the tree. */
   token?: string;
@@ -34,8 +35,9 @@ type GitHubRepository = { full_name: string; default_branch: string; private?: b
 export async function openGitHubTarget(input: string, options: GitHubOptions): Promise<ScanTarget> {
   const organization = parseGitHubOrganization(input);
   if (!organization) return openGitHub(input, options);
-  const deadline = AbortSignal.timeout(180_000);
-  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  const deadline = options.organizationTimeoutMs === undefined
+    ? undefined : AbortSignal.timeout(options.organizationTimeoutMs);
+  const signal = !deadline ? options.signal : options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   const scanOptions = { ...options, signal };
   const github = client(scanOptions);
   const url = `https://github.com/${organization}`;
@@ -78,7 +80,7 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
         if (repos.length < 100) total = new Set([...seen, ...repos.map((repo) => repo.full_name)]).size;
         for (const repo of repos) {
           if (seen.has(repo.full_name)) continue;
-          signal.throwIfAborted();
+          signal?.throwIfAborted();
           options.onOrganizationProgress?.({ completed: seen.size, total, current: repo.full_name });
           seen.add(repo.full_name);
           const source = await openRepository(client(scanOptions), repo, undefined, false, true);

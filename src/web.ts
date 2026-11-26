@@ -10,7 +10,7 @@ import { scan, type ScanTarget } from './core/scan.ts';
 
 export type WebOptions = {
   /** Opens what the user asked to scan, as the CLI does. */
-  open(input: string, options: Pick<GitHubOptions, 'signal' | 'onOrganizationProgress'>): Promise<ScanTarget>;
+  open(input: string, options: Pick<GitHubOptions, 'signal' | 'organizationTimeoutMs' | 'onOrganizationProgress'>): Promise<ScanTarget>;
   /** 0: any free port. */
   port: number;
 };
@@ -60,6 +60,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
     try {
       const result = await scan(await open(repo, {
         signal: controller.signal,
+        organizationTimeoutMs: 180_000,
         onOrganizationProgress: stream ? (progress) => write({ progress }) : undefined,
       }));
       if (controller.signal.aborted) return;

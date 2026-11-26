@@ -403,7 +403,12 @@ test('a GitHub timeout while reading a response body produces an AtlasError', as
   }), (error) => error instanceof AtlasError && /Cannot reach GitHub: .*timeout/.test(error.message));
 });
 
-test('organization progress uses the last-page bound before scanning the first repository', async () => {
+test('organization progress uses the last-page bound before scanning the first repository', async (t) => {
+  const timeout = AbortSignal.timeout;
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => {
+    assert.equal(ms, 15_000);
+    return timeout(ms);
+  });
   const totals: (number | undefined)[] = [];
   const target = await openGitHubTarget('github.com/Big', {
     onOrganizationProgress: ({ current, total }) => { if (current) totals.push(total); },
