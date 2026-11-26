@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
+import { parseHTML, type HTMLInputElement, type HTMLElement } from 'linkedom';
 import { run } from '../src/commands.ts';
 import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
 import { replay } from '../src/core/replay.ts';
@@ -124,4 +126,35 @@ test('serve with no port: 4173', async () => {
 test('?repo=<link> in the page address: scanned at once', async () => {
   const page = await (await fetch(`${server.url}/?repo=${encodeURIComponent(FIXTURE)}`)).text();
   assert.match(page, /new URLSearchParams\(location\.search\)\.get\('repo'\)/);
+});
+
+test('the served page filters skills by words and resets on a new scan', async () => {
+  const page = await (await fetch(server.url)).text();
+  const { document, Event } = parseHTML(page);
+  const context = {
+    document, URLSearchParams, location: { search: '' },
+    fetch: (path: string) => fetch(server.url + path),
+  };
+  runInNewContext(document.querySelector('script')!.textContent!, context);
+  await runInNewContext('scan(' + JSON.stringify(FIXTURE) + ')', context);
+  const filter = document.querySelector<HTMLInputElement>('#filter')!;
+  const names = () => Array.from(document.querySelectorAll('#skills .name') as Iterable<HTMLElement>, (node) => node.textContent);
+  const type = (value: string) => {
+    filter.value = value;
+    filter.dispatchEvent(new Event('input'));
+  };
+  assert.equal(filter.hidden, false);
+  assert.equal(names().length, 5);
+  type('  COMMITS   tools/linter ');
+  assert.deepEqual(names(), ['commits']);
+  assert.equal(document.querySelector('#skill h2')?.textContent, 'commits');
+  type('impossible-word');
+  assert.deepEqual(names(), []);
+  assert.equal(document.querySelector('#skill')?.textContent, 'No matching skills.');
+  type(' ');
+  assert.equal(names().length, 5);
+  type('lint');
+  await runInNewContext('scan(' + JSON.stringify(FIXTURE) + ')', context);
+  assert.equal(filter.value, '');
+  assert.equal(names().length, 5);
 });
