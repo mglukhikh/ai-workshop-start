@@ -25,15 +25,17 @@ const EXAMPLE: Recording = {
   },
 };
 
-const github = replay(EXAMPLE);
-
-/** `skill-atlas <args>`, as the CLI runs it, with GitHub answering from EXAMPLE. */
-export async function atlas(args: string[]) {
+/**
+ * `skill-atlas <args>`, as the CLI runs it, with GitHub answering from `recording`, EXAMPLE by
+ * default. With a token, through code search, as EXAMPLE answers it; `{ token: false }`, through the tree.
+ */
+export async function atlas(args: string[], { recording = EXAMPLE, token: withToken = true } = {}) {
+  const github = replay(recording);
+  const token = withToken ? 'test' : undefined;
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = await run(args, {
-    // With a token, through code search, as EXAMPLE answers it.
-    open: (input) => (parseGitHubUrl(input) ? openGitHub(input, { fetch: github, token: 'test' }) : openDirectory(input)),
+    open: (input) => (parseGitHubUrl(input) ? openGitHub(input, { fetch: github, token }) : openDirectory(input)),
     print: (text) => stdout.push(text),
     error: (text) => stderr.push(text),
   });
