@@ -2,7 +2,7 @@
 ## Input
 A **GitHub repository** URL, or a local directory
 ## Output
-Every `SKILL.md`: **name**, **description**, **link**
+Every *project skill* (below): **name**, **description**, **link**
 ## Architecture
 Core: fetch → find → parse. CLI: a *thin client*.
 Skill: id = `repo:path`, name, description, commit
@@ -12,3 +12,14 @@ Skill: id = `repo:path`, name, description, commit
 - The link pins the *scanned commit*
 - Malformed front matter → a *warning*, the scan goes on
 - Unreachable repository → a clear message, exit code 1
+## Project skill
+`<project>/<skills folder>/<skill>/SKILL.md`, the file named exactly `SKILL.md`
+- Skills folders, in this order: `.agents/skills`, `.claude/skills`, `.github/skills`, `agent/skills`
+- `<project>`: the repository root or any directory in it, for nested projects
+- Elsewhere → **not** a skill: test data, a skills folder's own `SKILL.md`, a skill's subdirectories; *one warning* lists them, the first five
+- **Copies**: one `<project>/<skill>` in several skills folders is *one* skill, even if the files differ
+  - The original is in the first folder of the list; the others are copies
+  - Original not at the scanned commit → the next copy, with a warning
+- One name in two projects → *two* skills
+- Symbolic links are not followed: the target is the skill
+- No `GITHUB_TOKEN` and a tree too large for one answer → only the root's skills folders, with a warning
