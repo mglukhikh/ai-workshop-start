@@ -454,3 +454,56 @@ test('Stop Scanning cancels the current GitHub request and displays completed re
     await context.close();
   }
 });
+
+test('Stop Scanning cancels a single repository and handles scan IDs', { timeout: 15_000 }, async (t) => {
+  const { chromium, expect } = await import('@playwright/test');
+  let signal: AbortSignal | undefined;
+  const server = await serve({
+    port: 0,
+    open: (input, options) => openTarget(input, {
+      ...options,
+      fetch: (_url, init) => {
+        const requestSignal = init!.signal!;
+        return new Promise((_, reject) => {
+          requestSignal.addEventListener('abort', () => reject(requestSignal.reason), { once: true });
+          signal = requestSignal;
+        });
+      },
+    }),
+  });
+  t.after(() => server.close());
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  const scanResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/scan');
+  await page.goto(`${server.url}/?repo=github.com/a/b`);
+  const response = await scanResponse;
+  await expect.poll(() => signal !== undefined).toBe(true);
+
+  const duplicate = await fetch(response.url());
+  assert.equal(duplicate.status, 409);
+  assert.deepEqual(await duplicate.json(), { error: 'Scan ID already in use' });
+  const unknown = await fetch(`${server.url}/api/stop?id=unknown`, { method: 'POST' });
+  assert.equal(unknown.status, 204);
+  const missing = await fetch(`${server.url}/api/stop`, { method: 'POST' });
+  assert.equal(missing.status, 204);
+  assert.equal(signal?.aborted, false);
+
+  const stop = page.getByRole('button', { name: 'Stop Scanning' });
+  const stopResponse = page.waitForResponse((reply) => new URL(reply.url()).pathname === '/api/stop');
+  await stop.click();
+  assert.equal((await stopResponse).status(), 204);
+  assert.equal(signal?.aborted, true);
+  await expect(page.getByText('Scan stopped.', { exact: true })).toBeVisible();
+  await expect(page.locator('#skills')).toBeEmpty();
+  await expect(stop).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Scan', exact: true })).toBeEnabled();
+  signal = undefined;
+  const apiUrl = new URL(response.url());
+  apiUrl.searchParams.set('id', 'api-stop-test');
+  const stream = await fetch(apiUrl);
+  await expect.poll(() => signal !== undefined).toBe(true);
+  const stopped = await fetch(`${server.url}/api/stop?id=api-stop-test`, { method: 'POST' });
+  assert.equal(stopped.status, 204);
+  assert.equal(await stream.text(), '{"stopped":true}\n');
+});
