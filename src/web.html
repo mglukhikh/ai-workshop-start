@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- The local web view, served by `skill-atlas serve`: the repository, its skills, their SKILL.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Atlas</title>
+<style>
+  :root { color-scheme: light dark; --border: #8884; --muted: #888; --accent: #4a7dff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+  header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: center; }
+  header h1 { font-size: 17px; margin: 0; white-space: nowrap; }
+  form { display: flex; gap: 8px; flex: 1; }
+  input { flex: 1; padding: 7px 10px; font: inherit; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; }
+  button { padding: 7px 14px; font: inherit; border: 0; border-radius: 6px; background: var(--accent); color: white; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  #status { padding: 8px 16px; color: var(--muted); }
+  #status.error { color: #d33; }
+  #warnings { margin: 0; padding: 0 16px 8px 32px; color: #b80; font-size: 13px; }
+  main { flex: 1; display: grid; grid-template-columns: minmax(240px, 1fr) 2fr; min-height: 0; border-top: 1px solid var(--border); }
+  #skills { list-style: none; margin: 0; padding: 0; overflow: auto; border-right: 1px solid var(--border); }
+  #skills li { padding: 8px 16px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  #skills li:hover { background: #8881; }
+  #skills li[aria-selected="true"] { background: #4a7dff22; }
+  .name { font-weight: 600; }
+  .description, .path { font-size: 13px; color: var(--muted); }
+  #skill { overflow: auto; padding: 12px 16px; min-width: 0; }
+  #skill a { font-size: 13px; word-break: break-all; }
+  #skill pre { white-space: pre-wrap; word-break: break-word; font: 13px/1.5 ui-monospace, monospace; border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Skill Atlas</h1>
+  <form id="form">
+    <input id="repo" name="repo" placeholder="https://github.com/JetBrains/kotlin, …/tree/&lt;commit | branch&gt;, or a directory" autofocus>
+    <button id="scan">Scan</button>
+  </form>
+</header>
+<div id="status">Paste a repository link and press Scan.</div>
+<ul id="warnings"></ul>
+<main>
+  <ul id="skills" role="listbox" aria-label="Skills"></ul>
+  <section id="skill" aria-live="polite"></section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  // Text only, never HTML: the SKILL.md files are the repository's, not ours.
+  function element(tag, props = {}, ...children) {
+    const node = Object.assign(document.createElement(tag), props);
+    node.append(...children);
+    return node;
+  }
+
+  function setStatus(text, error = false) { $('status').textContent = text; $('status').className = error ? 'error' : ''; }
+
+  async function scan(repo) {
+    $('scan').disabled = true;
+    $('skills').replaceChildren(); $('skill').replaceChildren(); $('warnings').replaceChildren();
+    setStatus(`Scanning ${repo}…`);
+    try {
+      const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}`);
+      const result = await response.json();
+      if (!response.ok) return setStatus(result.error, true);
+      show(result);
+    } catch (error) {
+      setStatus(`Cannot reach the Skill Atlas server: ${error.message}`, true);
+    } finally {
+      $('scan').disabled = false;
+    }
+  }
+
+  function show({ repository, skills, warnings }) {
+    setStatus(`${repository.id} · ${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`);
+    $('warnings').replaceChildren(...warnings.map((text) => element('li', { textContent: `warning: ${text}` })));
+    $('skills').replaceChildren(...skills.map((skill) => {
+      const item = element('li', { role: 'option', tabIndex: 0 },
+        element('div', { className: 'name', textContent: skill.name }),
+        element('div', { className: 'description', textContent: skill.description }),
+        element('div', { className: 'path', textContent: skill.path }));
+      item.onclick = () => select(item, skill);
+      item.onkeydown = (event) => { if (event.key === 'Enter') select(item, skill); };
+      return item;
+    }));
+    if (skills.length > 0) select($('skills').firstChild, skills[0]);
+  }
+
+  function select(item, skill) {
+    for (const other of $('skills').children) other.setAttribute('aria-selected', String(other === item));
+    $('skill').replaceChildren(
+      element('h2', { textContent: skill.name }),
+      element('a', { href: skill.link, textContent: skill.link, target: '_blank', rel: 'noopener' }),
+      ...(skill.copies.length > 0 ? [element('div', { className: 'path', textContent: `also in ${skill.copies.join(', ')}` })] : []),
+      element('pre', { textContent: skill.text }));
+  }
+
+  $('form').onsubmit = (event) => {
+    event.preventDefault();
+    const repo = $('repo').value.trim();
+    if (!repo) return;
+    history.replaceState(null, '', `?repo=${encodeURIComponent(repo)}`);
+    scan(repo);
+  };
+
+  const initial = new URLSearchParams(location.search).get('repo');
+  if (initial) { $('repo').value = initial; scan(initial); }
+</script>
+</body>
+</html>
