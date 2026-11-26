@@ -402,3 +402,23 @@ test('a GitHub timeout while reading a response body produces an AtlasError', as
     })),
   }), (error) => error instanceof AtlasError && /Cannot reach GitHub: .*timeout/.test(error.message));
 });
+
+test('organization progress uses the last-page bound before scanning the first repository', async () => {
+  const totals: (number | undefined)[] = [];
+  const target = await openGitHubTarget('github.com/Big', {
+    onOrganizationProgress: ({ current, total }) => { if (current) totals.push(total); },
+    fetch: async (url) => {
+      if (url.includes('/orgs/')) {
+        const first = url.endsWith('&page=1');
+        return Response.json(Array.from({ length: first ? 100 : 50 }, (_, index) => ({
+          full_name: `Big/repo-${index + (first ? 0 : 100)}`, default_branch: 'main',
+        })), { headers: first ? {
+          link: '<https://api.github.com/orgs/Big/repos?per_page=100&page=2>; rel="last"',
+        } : {} });
+      }
+      return Response.json(url.includes('/commits/') ? { sha: COMMIT } : { tree: [] });
+    },
+  });
+  await scan(target);
+  assert.deepEqual(totals, [...Array(100).fill(200), ...Array(50).fill(150)]);
+});

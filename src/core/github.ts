@@ -45,6 +45,7 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
     async *sources() {
       options.onOrganizationProgress?.({ completed: 0 });
       const seen = new Set<string>();
+      let total: number | undefined;
       for (let page = 1; ; page++) {
         const notFound = `Organization not found: ${url}`;
         const repos = await github.json<GitHubRepository[] | undefined>(
@@ -53,6 +54,9 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
           [404],
           page === 1 ? 404 : undefined,
           (response, repositories) => {
+            const lastLink = response.headers.get('link')?.split(',').find((link) => /;\s*rel="last"/.test(link));
+            const lastPage = Number(lastLink?.match(/[?&]page=(\d+)(?:&|>)/)?.[1]);
+            if (Number.isSafeInteger(lastPage * 100) && lastPage > page) total = lastPage * 100;
             const remaining = response.headers.get('x-ratelimit-remaining');
             const unscanned = new Set((repositories as GitHubRepository[])
               .map((repo) => repo.full_name).filter((id) => !seen.has(id)));
@@ -71,7 +75,7 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
             ? `GitHub user accounts are unsupported for organization scans: ${url}`
             : notFound);
         }
-        const total = repos.length < 100 ? new Set([...seen, ...repos.map((repo) => repo.full_name)]).size : undefined;
+        if (repos.length < 100) total = new Set([...seen, ...repos.map((repo) => repo.full_name)]).size;
         for (const repo of repos) {
           if (seen.has(repo.full_name)) continue;
           signal.throwIfAborted();
