@@ -17,6 +17,7 @@
   button:disabled { opacity: .6; cursor: default; }
   #status { padding: 8px 16px; color: var(--muted); }
   #status.error { color: #d33; }
+  #filter { margin: 0 16px 8px; flex: none; }
   #warnings { margin: 0; padding: 0 16px 8px 32px; color: #b80; font-size: 13px; }
   main { flex: 1; display: grid; grid-template-columns: minmax(240px, 1fr) 2fr; min-height: 0; border-top: 1px solid var(--border); }
   #skills { list-style: none; margin: 0; padding: 0; overflow: auto; border-right: 1px solid var(--border); }
@@ -40,6 +41,7 @@
 </header>
 <div id="status">Paste a repository link and press Scan.</div>
 <ul id="warnings"></ul>
+<input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
   <ul id="skills" role="listbox" aria-label="Skills"></ul>
   <section id="skill" aria-live="polite"></section>
@@ -58,6 +60,8 @@
   async function scan(repo) {
     $('scan').disabled = true;
     $('skills').replaceChildren(); $('skill').replaceChildren(); $('warnings').replaceChildren();
+    $('filter').hidden = true;
+    $('filter').value = '';
     setStatus(`Scanning ${repo}…`);
     try {
       const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}`);
@@ -74,16 +78,33 @@
   function show({ repository, skills, warnings }) {
     setStatus(`${repository.id} · ${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`);
     $('warnings').replaceChildren(...warnings.map((text) => element('li', { textContent: `warning: ${text}` })));
-    $('skills').replaceChildren(...skills.map((skill) => {
-      const item = element('li', { role: 'option', tabIndex: 0 },
+    const filter = $('filter');
+    filter.hidden = skills.length === 0;
+    filter.oninput = renderSkills;
+    renderSkills();
+
+    function renderSkills() {
+      const query = filter.value.trim().toLowerCase();
+      const words = query ? query.split(/\s+/) : [];
+      const matches = skills.filter(({ name, description, path }) => {
+        const searchable = `${name} ${description} ${path}`.toLowerCase();
+        return words.every((word) => searchable.includes(word));
+      });
+      $('skill').replaceChildren();
+      $('skills').replaceChildren(...matches.map(skillOption));
+      if (matches.length > 0) select($('skills').firstChild, matches[0]);
+      else if (words.length > 0) $('skill').textContent = 'No matching skills.';
+    }
+  }
+
+  function skillOption(skill) {
+    const item = element('li', { role: 'option', tabIndex: 0 },
         element('div', { className: 'name', textContent: skill.name }),
         element('div', { className: 'description', textContent: skill.description }),
         element('div', { className: 'path', textContent: skill.path }));
-      item.onclick = () => select(item, skill);
-      item.onkeydown = (event) => { if (event.key === 'Enter') select(item, skill); };
-      return item;
-    }));
-    if (skills.length > 0) select($('skills').firstChild, skills[0]);
+    item.onclick = () => select(item, skill);
+    item.onkeydown = (event) => { if (event.key === 'Enter') select(item, skill); };
+    return item;
   }
 
   function select(item, skill) {
