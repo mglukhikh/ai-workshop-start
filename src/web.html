@@ -16,6 +16,8 @@
   button { padding: 7px 14px; font: inherit; border: 0; border-radius: 6px; background: var(--accent); color: white; cursor: pointer; }
   button:disabled { opacity: .6; cursor: default; }
   #status { padding: 8px 16px; color: var(--muted); }
+  #scan-progress { margin: 0 16px; width: calc(100% - 32px); }
+  #current-repository { padding: 4px 16px 8px; color: var(--muted); }
   #status.error { color: #d33; }
   #filter { margin: 0 16px 8px; flex: none; }
   #warnings { margin: 0; padding: 0 16px 8px 32px; color: #b80; font-size: 13px; }
@@ -40,6 +42,8 @@
   </form>
 </header>
 <div id="status" role="status">Paste a repository or organization link and press Scan.</div>
+<progress id="scan-progress" aria-label="Organization scan progress" hidden></progress>
+<div id="current-repository" role="status" hidden></div>
 <ul id="warnings"></ul>
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
@@ -64,6 +68,8 @@
     $('filter').hidden = true;
     $('filter').value = '';
     setStatus(`Scanning ${repo}…`);
+    const bar = $('scan-progress');
+    const currentRepository = $('current-repository');
     try {
       const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}&progress=1`);
       if (!response.ok) return setStatus((await response.json()).error, true);
@@ -76,14 +82,25 @@
           const event = JSON.parse(line);
           if (event.error) return setStatus(event.error, true);
           if (event.result) return show(event.result);
-          const { id, completed } = event.progress;
-          setStatus(`Scanned ${completed} ${completed === 1 ? 'repository' : 'repositories'} · ${id}`);
+          const { completed, total, current } = event.progress;
+          bar.hidden = false;
+          if (total) {
+            bar.setAttribute('max', total);
+            bar.setAttribute('value', completed);
+          } else {
+            bar.removeAttribute('value');
+          }
+          currentRepository.hidden = !current;
+          currentRepository.textContent = current ? `Scanning ${current}…` : '';
+          setStatus(`Scanned ${completed} ${completed === 1 ? 'repository' : 'repositories'}`);
         }
       }
       setStatus('The scan ended before returning results.', true);
     } catch (error) {
       setStatus(`Cannot reach the Skill Atlas server: ${error.message}`, true);
     } finally {
+      bar.hidden = true;
+      currentRepository.hidden = true;
       $('scan').disabled = false;
       $('scan').textContent = 'Scan';
     }

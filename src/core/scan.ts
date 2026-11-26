@@ -13,7 +13,7 @@ export type Source = {
   read(path: string): Promise<Uint8Array | undefined>;
 };
 
-export type ScanTarget = Source | { repository: Repository; sources(): AsyncIterable<Source> };
+export type ScanTarget = Source | { repository: Repository; deadline?: AbortSignal; sources(): AsyncIterable<Source> };
 
 export type ScanResult = { repository: Repository; skills: Skill[]; warnings: string[] };
 
@@ -22,10 +22,16 @@ export async function scan(source: ScanTarget): Promise<ScanResult> {
   if ('sources' in source) {
     const skills: Skill[] = [];
     const warnings: string[] = [];
-    for await (const repository of source.sources()) {
-      const result = await scan(repository);
-      for (const skill of result.skills) skills.push(skill);
-      for (const warning of result.warnings) warnings.push(`${repository.repository.id}: ${warning}`);
+    try {
+      for await (const repository of source.sources()) {
+        const result = await scan(repository);
+        source.deadline?.throwIfAborted();
+        for (const skill of result.skills) skills.push(skill);
+        for (const warning of result.warnings) warnings.push(`${repository.repository.id}: ${warning}`);
+      }
+    } catch (error) {
+      if (!source.deadline?.aborted || error !== source.deadline.reason) throw error;
+      warnings.push('Organization scan reached the 3-minute limit. Showing results from completed repositories.');
     }
     return { repository: source.repository, skills: sortSkills(skills), warnings };
   }

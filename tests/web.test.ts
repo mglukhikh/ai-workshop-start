@@ -102,6 +102,27 @@ test('an unreachable repository or an empty field → the clear message, status 
   assert.equal((await scan(' ')).status, 400);
 });
 
+test('the served page displays the streamed scan error', async () => {
+  const { document } = parseHTML(await (await fetch(server.url)).text());
+  const missing = join(FIXTURE, 'no-such-directory');
+  await runInNewContext(
+    document.querySelector('script')!.textContent! + '\nscan(missing);',
+    {
+      document, missing, URLSearchParams, TextDecoderStream, location: { search: '' },
+      fetch: async (path: string) => {
+        const url = new URL(path, server.url);
+        assert.equal(url.searchParams.get('progress'), '1');
+        const response = await fetch(url);
+        assert.equal(response.status, 200);
+        return response;
+      },
+    },
+  );
+  const status = document.querySelector('#status')!;
+  assert.equal(status.textContent, `Not a GitHub URL or a readable directory: ${missing}`);
+  assert.equal(status.className, 'error');
+});
+
 test('only this machine: another host name → 403; an unknown path → 404', async () => {
   const status = await new Promise<number>((resolve, reject) => {
     request(server.url, { headers: { host: 'attacker.example' } }, (response) => resolve(response.statusCode ?? 0)).on('error', reject).end();
@@ -235,17 +256,28 @@ test('the served page shows organization progress before the final result', asyn
   assert.equal(button.textContent, 'Scanning…');
   assert.equal(Reflect.get(button, 'disabled'), true);
   let events = '';
-  while (!events.includes('\n')) events += (await reader.read()).value;
-  const newline = events.indexOf('\n');
-  assert.deepEqual(JSON.parse(events.slice(0, newline)), { progress: { id: repos[0], completed: 1 } });
-  await writer.write(events.slice(0, newline + 1));
+  while (events.split('\n').length < 4) events += (await reader.read()).value;
+  const newline = events.split('\n', 3).join('\n').length;
+  const [listing, started, completed] = events.slice(0, newline).split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(listing, { progress: { completed: 0 } });
+  assert.deepEqual(started, { progress: { current: repos[0], completed: 0, total: 3 } });
+  assert.deepEqual(completed, { progress: { completed: 1, total: 3 } });
+  const startEnd = events.split('\n', 2).join('\n').length + 1;
+  await writer.write(events.slice(0, startEnd));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const bar = document.querySelector<HTMLElement>('#scan-progress')!;
+  assert.equal(bar.hidden, false);
+  assert.equal(bar.getAttribute('max'), '3');
+  assert.equal(bar.getAttribute('value'), '0');
+  assert.equal(document.querySelector('#current-repository')!.textContent, `Scanning ${repos[0]}…`);
+  await writer.write(events.slice(startEnd, newline + 1));
   await progressShown;
   let remaining = events.slice(newline + 1);
   for (let next = await reader.read(); !next.done; next = await reader.read()) remaining += next.value;
-  const [, emptyProgress] = remaining.trimEnd().split('\n').map((line) => JSON.parse(line));
+  const [, , , emptyProgress] = remaining.trimEnd().split('\n').map((line) => JSON.parse(line));
   await writer.write(remaining);
   await writer.close();
-  assert.deepEqual(emptyProgress, { progress: { id: emptyRepo, completed: 3 } });
+  assert.deepEqual(emptyProgress, { progress: { completed: 3, total: 3 } });
   await pending;
   assert.match(status.textContent!, /JetBrains · 2 skills/);
   assert.equal(Reflect.get(button, 'disabled'), false);
@@ -292,6 +324,41 @@ test('disconnecting aborts the in-flight GitHub request and stops the scan', { t
     assert.equal(calls, 2);
   } finally {
     controller.abort();
+    await server.close();
+  }
+});
+
+test('the organization deadline cancels the current request and streams partial results', { timeout: 5000 }, async (t) => {
+  const deadline = new AbortController();
+  const timeout = AbortSignal.timeout;
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 180_000 ? deadline.signal : timeout(ms));
+  let cancelled = false;
+  const server = await serve({
+    port: 0,
+    open: (input, options) => openTarget(input, {
+      ...options,
+      fetch: (url, init) => {
+        if (!url.includes(`/repos/${repos[1]}/`)) return github(url, init);
+        return new Promise((_, reject) => {
+          const signal = init!.signal!;
+          signal.addEventListener('abort', () => {
+            cancelled = true;
+            reject(signal.reason);
+          }, { once: true });
+          deadline.abort(new DOMException('Deadline exceeded', 'TimeoutError'));
+        });
+      },
+    }),
+  });
+  try {
+    const response = await fetch(`${server.url}/api/scan?repo=github.com/JetBrains&progress=1`);
+    const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(cancelled, true);
+    assert.deepEqual(events.at(-2), { progress: { completed: 1, total: 3, current: repos[1] } });
+    const { result } = events.at(-1);
+    assert.deepEqual(result.skills.map((skill: { repository: string }) => skill.repository), [repos[0]]);
+    assert.match(result.warnings.at(-1), /3-minute limit/);
+  } finally {
     await server.close();
   }
 });
