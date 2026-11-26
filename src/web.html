@@ -6,38 +6,78 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Skill Atlas</title>
 <style>
-  :root { color-scheme: light dark; --border: #8884; --muted: #888; --accent: #4a7dff; }
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f8fa; --panel: #fff; --text: #1d2330; --muted: #6b7280; --border: #e3e6eb;
+    --accent: #4f6ef7; --accent-soft: #4f6ef71a; --warn: #a15c00; --warn-soft: #fff4e0; --error: #c62828;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161b; --panel: #1c1f26; --text: #e6e8ec; --muted: #9aa1ad; --border: #2c313b;
+      --accent: #7b93ff; --accent-soft: #7b93ff22; --warn: #f0b45a; --warn-soft: #3a2c14; --error: #ff6b6b; }
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-  header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: center; }
-  header h1 { font-size: 17px; margin: 0; white-space: nowrap; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; height: 100vh; }
+  header { padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; gap: 16px; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; white-space: nowrap; letter-spacing: -.01em; }
+  header h1 span { color: var(--accent); }
   form { display: flex; gap: 8px; flex: 1; }
-  input { flex: 1; padding: 7px 10px; font: inherit; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; }
-  button { padding: 7px 14px; font: inherit; border: 0; border-radius: 6px; background: var(--accent); color: white; cursor: pointer; }
-  button:disabled { opacity: .6; cursor: default; }
+  input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #repo { flex: 1; }
+  button { font: inherit; font-weight: 600; padding: 8px 18px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: progress; }
   #status { padding: 8px 16px; color: var(--muted); }
   #scan-progress { margin: 0 16px; width: calc(100% - 32px); }
   #current-repository { padding: 4px 16px 8px; color: var(--muted); }
   #status.error { color: #d33; }
-  #filter { margin: 0 16px 8px; flex: none; }
-  #warnings { max-height: 30vh; overflow: auto; flex: none; margin: 0; padding: 0 16px 8px 32px; color: #b80; font-size: 13px; }
-  main { flex: 1; display: grid; grid-template-columns: minmax(240px, 1fr) 2fr; min-height: 0; border-top: 1px solid var(--border); }
-  #skills { list-style: none; margin: 0; padding: 0; overflow: auto; border-right: 1px solid var(--border); }
-  #skills li { padding: 8px 16px; cursor: pointer; border-bottom: 1px solid var(--border); }
-  #skills li:hover { background: #8881; }
-  #skills li[aria-selected="true"] { background: #4a7dff22; }
-  .name { font-weight: 600; }
-  .description, .path { font-size: 13px; color: var(--muted); }
-  #skill { overflow: auto; padding: 12px 16px; min-width: 0; }
-  #skill a { font-size: 13px; word-break: break-all; }
-  #skill pre { white-space: pre-wrap; word-break: break-word; font: 13px/1.5 ui-monospace, monospace; border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+  #warnings:empty { display: none; }
+  #warnings { max-height: 30vh; overflow: auto; flex: none; margin: 0 20px 10px; padding: 8px 12px 8px 30px; background: var(--warn-soft); color: var(--warn); border-radius: 8px; font-size: 13px; }
+  main { flex: 1; display: grid; grid-template-columns: minmax(260px, 1fr) 2.2fr; gap: 16px; padding: 0 20px 20px; min-height: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  #filter { margin: 10px; }
+  #skills { list-style: none; margin: 0; padding: 0 6px 6px; overflow: auto; flex: 1; }
+  #skills li { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  #skills li:hover { background: var(--accent-soft); }
+  #skills li[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+  #skills li:focus-visible { outline: 2px solid var(--accent); }
+  .name { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  .badge { font-size: 11px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 99px; padding: 0 7px; }
+  .description { font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .path { font: 12px var(--mono); color: var(--muted); word-break: break-all; }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+  #skill-head { padding: 14px 18px 0; }
+  #skill-head h2 { margin: 0 0 2px; font-size: 20px; }
+  #skill-head p { margin: 4px 0; }
+  #skill-head a { color: var(--accent); font-size: 13px; word-break: break-all; }
+  [role="tablist"] { display: flex; gap: 4px; padding: 10px 18px 0; border-bottom: 1px solid var(--border); }
+  [role="tab"] { background: none; color: var(--muted); border-radius: 0; padding: 8px 12px; border-bottom: 2px solid transparent; font-weight: 600; }
+  [role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  [role="tab"] .badge { margin-left: 4px; }
+  [role="tabpanel"] { overflow: auto; flex: 1; }
+  #text { margin: 0; padding: 12px 0; font: 13px/1.6 var(--mono); }
+  #text div { padding: 0 18px 0 0; white-space: pre-wrap; word-break: break-word; display: grid; grid-template-columns: 3.5em 1fr; }
+  #text div::before { content: attr(data-line); color: var(--muted); opacity: .6; text-align: right; padding-right: 1em; user-select: none; }
+  #text div.heading { font-weight: 700; color: var(--accent); }
+  #text div.target { background: var(--accent-soft); }
+  #contents { list-style: none; margin: 0; padding: 12px 18px; }
+  #contents li { margin: 1px 0; }
+  #contents a { display: block; color: var(--text); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+  #contents a:hover { background: var(--accent-soft); color: var(--accent); }
+  #contents .level-1 a { font-weight: 700; font-size: 16px; }
+  #contents .level-2 { padding-left: 18px; }
+  #contents .level-2 a { font-weight: 600; }
+  #contents .level-3 { padding-left: 36px; }
+  #contents .level-3 a { color: var(--muted); }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } header { flex-direction: column; align-items: stretch; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>Skill Atlas</h1>
+  <h1>Skill <span>Atlas</span></h1>
   <form id="form">
-    <input id="repo" name="repo" placeholder="https://github.com/JetBrains/kotlin, …/tree/&lt;commit | branch&gt;, or a directory" autofocus>
+    <input id="repo" name="repo" placeholder="https://github.com/JetBrains/kotlin, …/tree/&lt;commit | branch&gt;, or a directory" aria-label="Repository link" autofocus>
     <button id="scan">Scan</button>
   </form>
 </header>
@@ -45,10 +85,14 @@
 <progress id="scan-progress" aria-label="Organization scan progress" hidden></progress>
 <div id="current-repository" role="status" hidden></div>
 <ul id="warnings"></ul>
-<input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
-  <ul id="skills" role="listbox" aria-label="Skills"></ul>
-  <section id="skill" aria-live="polite"></section>
+  <section class="panel">
+    <input id="filter" hidden type="search" placeholder="Filter skills" aria-label="Filter skills">
+    <ul id="skills" role="listbox" aria-label="Skills"></ul>
+  </section>
+  <section id="skill" class="panel" aria-live="polite">
+    <div class="empty">No skill selected.</div>
+  </section>
 </main>
 <script>
   const $ = (id) => document.getElementById(id);
@@ -130,7 +174,8 @@
 
   function skillOption(skill, repositoryId) {
     const item = element('li', { role: 'option', tabIndex: 0 },
-        element('div', { className: 'name', textContent: skill.name }),
+        element('div', { className: 'name' }, skill.name,
+          ...(skill.copies.length ? [element('span', { className: 'badge', textContent: `+${skill.copies.length} ${skill.copies.length === 1 ? 'copy' : 'copies'}` })] : [])),
         element('div', { className: 'description', textContent: skill.description }),
         element('div', { className: 'path', textContent: skill.repository === repositoryId ? skill.path : `${skill.repository} · ${skill.path}` }));
     item.onclick = () => select(item, skill);
@@ -138,13 +183,62 @@
     return item;
   }
 
+  let tab = 'text';
+
   function select(item, skill) {
     for (const other of $('skills').children) other.setAttribute('aria-selected', String(other === item));
+    const tabButton = (id, label, badge) => {
+      const button = element('button', { role: 'tab', id: `tab-${id}`, type: 'button' }, label,
+        ...(badge === undefined ? [] : [element('span', { className: 'badge', textContent: String(badge) })]));
+      button.setAttribute('aria-selected', String(tab === id));
+      button.setAttribute('aria-controls', id);
+      button.onclick = () => activateTab(id);
+      return button;
+    };
+    const lines = skill.text.replace(/\r?\n$/, '').split(/\r?\n/);
+    const headingLines = new Set(skill.headings.map((heading) => heading.line));
+    const text = element('div', { id: 'text', role: 'tabpanel', hidden: tab !== 'text' },
+      ...lines.map((line, index) => {
+        const row = element('div', { textContent: line, className: headingLines.has(index + 1) ? 'heading' : '' });
+        row.dataset.line = String(index + 1);
+        return row;
+      }));
+    const contents = element('ul', { id: 'contents', role: 'tabpanel', hidden: tab !== 'contents' },
+      ...(skill.headings.length === 0
+        ? [element('li', { className: 'empty', textContent: 'No titles in this SKILL.md.' })]
+        : skill.headings.map((heading) => {
+            const link = element('a', { href: `#line-${heading.line}`, textContent: heading.title });
+            link.onclick = (event) => { event.preventDefault(); jump(heading.line); };
+            return element('li', { className: `level-${heading.level}` }, link);
+          })));
     $('skill').replaceChildren(
-      element('h2', { textContent: skill.name }),
-      element('a', { href: skill.link, textContent: skill.link, target: '_blank', rel: 'noopener' }),
-      ...(skill.copies.length > 0 ? [element('div', { className: 'path', textContent: `also in ${skill.copies.join(', ')}` })] : []),
-      element('pre', { textContent: skill.text }));
+      element('div', { id: 'skill-head' },
+        element('h2', { textContent: skill.name }),
+        ...(skill.description ? [element('p', { textContent: skill.description })] : []),
+        element('a', { href: skill.link, textContent: skill.link, target: '_blank', rel: 'noopener' }),
+        ...(skill.copies.length ? [element('div', { className: 'path', textContent: `also in ${skill.copies.join(', ')}` })] : [])),
+      element('div', { role: 'tablist', ariaLabel: 'SKILL.md views' }, tabButton('text', 'SKILL.md'), tabButton('contents', 'Contents', skill.headings.length)),
+      text,
+      contents);
+  }
+
+  function activateTab(id) {
+    tab = id;
+    for (const name of ['text', 'contents']) {
+      $(name).hidden = name !== id;
+      $(`tab-${name}`).setAttribute('aria-selected', String(name === id));
+    }
+  }
+
+  /** From Contents to the title's line in SKILL.md. */
+  function jump(line) {
+    activateTab('text');
+    const row = $('text').querySelector(`[data-line="${line}"]`);
+    $('text').querySelector('.target')?.classList.remove('target');
+    row.classList.add('target');
+    row.tabIndex = -1;
+    row.focus({ preventScroll: true });
+    row.scrollIntoView({ block: 'start' });
   }
 
   $('form').onsubmit = (event) => {

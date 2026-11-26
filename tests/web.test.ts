@@ -1,5 +1,8 @@
 // The decisions in spec/web.md, checked over HTTP on the real server: ./fixture, and the small
 // GitHub repository answered in tests/helpers.ts.
+import { JSDOM } from 'jsdom';
+import { setTimeout as delay } from 'node:timers/promises';
+import { outline } from '../src/core/outline.ts';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -386,4 +389,81 @@ test('the organization deadline cancels the current request and streams partial 
   } finally {
     await server.close();
   }
+});
+
+test('Contents: the #, ## and ### titles of each SKILL.md, with their lines; not in code blocks', async () => {
+  const { body } = await scan(FIXTURE);
+  const headings = Object.fromEntries(body.skills.map((skill: any) => [skill.path, skill.headings]));
+  assert.deepEqual(headings['.github/skills/code-style/SKILL.md'], [
+    { level: 1, title: 'Code style', line: 6 },
+    { level: 2, title: 'Kotlin', line: 11 },
+    { level: 3, title: 'Imports', line: 13 },
+    // `# Not a title` is in a code block, `#### Too deep…` is level 4: neither is in the contents.
+    { level: 2, title: 'Java', line: 24 },
+  ]);
+  assert.deepEqual(headings['tools/linter/.claude/skills/lint/SKILL.md'], [{ level: 1, title: 'Lint', line: 6 }]);
+  // Malformed front matter: the titles are still there.
+  assert.deepEqual(headings['.agents/skills/release-checklist/SKILL.md'], [{ level: 1, title: 'Release checklist', line: 6 }]);
+});
+
+test('Contents: Markdown title rules; none → an empty list', () => {
+  const text = [
+    '---', 'description: "# not a title: front matter"', '---',
+    '#hashtag, not a title', '  ## Indented ##  ', '    # four spaces: code', '#', '###',
+    '~~~', '# in a ~~~ block', '```', '# still in it: ``` does not close ~~~', '~~~',
+    '### After the block',
+  ].join('\n') + '\r\n# Windows line ending\r\n';
+  assert.deepEqual(outline(text), [
+    { level: 2, title: 'Indented', line: 5 },
+    { level: 3, title: 'After the block', line: 14 },
+    { level: 1, title: 'Windows line ending', line: 15 },
+  ]);
+  assert.deepEqual(outline('---\nname: x\n---\nNo titles.\n'), []);
+});
+
+test('the served page preserves selection focus, and jumps to numbered lines', async (t) => {
+  const url = `${server.url}/?repo=${encodeURIComponent(FIXTURE)}`;
+  const dom = new JSDOM(await (await fetch(url)).text(), {
+    url,
+    runScripts: 'dangerously',
+    beforeParse(window) {
+      window.TextDecoderStream = TextDecoderStream;
+      window.fetch = (input: string) => fetch(new URL(input, url));
+      window.HTMLElement.prototype.scrollIntoView = function () {
+        this.setAttribute('data-scrolled', 'true');
+      };
+    },
+  });
+  t.after(() => dom.window.close());
+  const { document, KeyboardEvent } = dom.window;
+  for (let attempt = 0; attempt < 100 && !document.querySelector('#skills [role="option"]'); attempt++) {
+    await delay(20);
+  }
+  assert.equal(document.querySelectorAll('#skills [role="option"]').length, 5);
+
+  const skill = document.querySelectorAll<HTMLElement>('#skills [role="option"]')[1];
+  skill.focus();
+  skill.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.equal(document.activeElement, skill);
+  assert.equal(skill.getAttribute('aria-selected'), 'true');
+
+  document.querySelector<HTMLElement>('#skills [role="option"]')!.click();
+  const contentsTab = document.querySelector<HTMLElement>('#tab-contents')!;
+  contentsTab.focus();
+  contentsTab.click();
+  assert.equal(document.activeElement, contentsTab);
+  assert.equal(contentsTab.getAttribute('aria-selected'), 'true');
+
+  const java = Array.from(document.querySelectorAll<HTMLAnchorElement>('#contents a')).find((link) => link.textContent === 'Java');
+  assert.ok(java);
+  assert.equal(java.closest('li')?.className, 'level-2');
+  java.click();
+  assert.equal(document.querySelector('#tab-text')?.getAttribute('aria-selected'), 'true');
+  const rows = Array.from(document.querySelectorAll<HTMLElement>('#text [data-line]'));
+  const source = readFileSync(join(FIXTURE, '.github/skills/code-style/SKILL.md'), 'utf8').replace(/\r?\n$/, '').split(/\r?\n/);
+  assert.deepEqual(rows.map((row) => row.textContent), source);
+  assert.deepEqual(rows.map((row) => Number(row.dataset.line)), source.map((_, index) => index + 1));
+  assert.equal(document.activeElement, rows[23]);
+  assert.equal(rows[23].getAttribute('data-scrolled'), 'true');
+  assert.ok(rows[23].classList.contains('target'));
 });
