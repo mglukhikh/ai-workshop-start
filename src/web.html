@@ -57,11 +57,30 @@
   #skills li[aria-selected="true"] { background: #782e3517; box-shadow: inset 4px 0 var(--accent); }
   .name { font-weight: 700; color: var(--accent); }
   .description, .path { font-size: 14px; color: var(--muted); }
-  .description mark { background: #e9c77a; color: inherit; border-radius: 2px; }
+  .description mark, #skill-head p mark { background: #e9c77a; color: inherit; border-radius: 2px; }
   #skill { padding: 16px clamp(16px, 3vw, 32px); min-width: 0; overflow: auto; overflow-wrap: anywhere; }
   #skill h2 { margin: 0 0 8px; color: var(--accent); }
   #skill a { font-size: 14px; color: var(--accent); }
-  #skill pre { white-space: pre-wrap; font: 13px/1.55 ui-monospace, monospace; border: 1px solid var(--border); background: var(--paper); padding: 14px; }
+  .badge { font-size: 12px; font-weight: 400; color: var(--muted); border: 1px solid var(--border); border-radius: 99px; padding: 0 8px; margin-left: 6px; white-space: nowrap; }
+  .empty { color: var(--muted); padding: 24px 16px; text-align: center; font-style: italic; }
+  #skills li.empty { cursor: default; border-bottom: 0; }
+  #skills li.empty:hover { background: none; }
+  #skill-head p { margin: 4px 0 8px; color: var(--muted); }
+  [role="tablist"] { display: flex; gap: 4px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
+  [role="tab"] { background: none; color: var(--muted); border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 6px 12px; }
+  [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+  #text { margin: 0; padding: 12px 0; font: 13px/1.55 ui-monospace, monospace; border: 1px solid var(--border); border-top: 0; background: var(--paper); }
+  #text div { display: grid; grid-template-columns: 3.5em minmax(0, 1fr); padding-right: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #text div::before { content: attr(data-line); color: var(--muted); opacity: .7; text-align: right; padding-right: 1em; user-select: none; }
+  #text div.heading { font-weight: 700; color: var(--accent); }
+  #text div.target { background: #e9c77a80; }
+  #contents { list-style: none; margin: 0; padding: 12px 8px; border: 1px solid var(--border); border-top: 0; background: var(--paper); }
+  #contents a { display: block; padding: 3px 8px; border-radius: 4px; color: var(--ink); text-decoration: none; font-size: 16px; }
+  #contents a:hover { background: #782e350e; color: var(--accent); }
+  #contents .level-1 a { font-weight: 700; }
+  #contents .level-2 { padding-left: 20px; }
+  #contents .level-3 { padding-left: 40px; }
+  #contents .level-3 a { color: var(--muted); font-size: 15px; }
   @media (max-width: 640px) {
     .atlas { height: auto; min-height: calc(100vh - clamp(24px, 8vw, 96px)); }
     main { grid-template-columns: minmax(0, 1fr); }
@@ -74,7 +93,7 @@
 <header>
   <h1>Skill Atlas</h1>
   <form id="form">
-    <input id="repo" name="repo" placeholder="https://github.com/JetBrains/kotlin, …/tree/&lt;commit | branch&gt;, or a directory" autofocus>
+    <input id="repo" name="repo" placeholder="https://github.com/JetBrains/kotlin, …/tree/&lt;commit | branch&gt;, or a directory" aria-label="Repository link" autofocus>
     <button id="scan">Scan</button>
     <button id="stop" type="button" hidden disabled>Stop Scanning</button>
   </form>
@@ -87,7 +106,7 @@
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
   <ul id="skills" role="listbox" aria-label="Skills"></ul>
-  <section id="skill" aria-live="polite"></section>
+  <section id="skill" aria-live="polite"><div class="empty">No skill selected.</div></section>
 </main>
 </div>
 <script>
@@ -112,10 +131,16 @@
 
   warningsToggle.onclick = () => setWarningsExpanded(warningsPanel.hidden);
 
+  function showEmptySkills(listMessage, detailMessage = 'No skill selected.') {
+    $('skills').replaceChildren(element('li', { className: 'empty', role: 'presentation' }, listMessage));
+    $('skill').replaceChildren(element('div', { className: 'empty' }, detailMessage));
+  }
+
   async function scan(repo) {
     $('scan').disabled = true;
     $('scan').textContent = 'Scanning…';
-    $('skills').replaceChildren(); $('skill').replaceChildren(); warningsPanel.replaceChildren();
+    showEmptySkills('Scanning…');
+    warningsPanel.replaceChildren();
     warningsToggle.hidden = true;
     setWarningsExpanded(false);
     $('filter').hidden = true;
@@ -125,6 +150,7 @@
     const currentRepository = $('current-repository');
     const stop = $('stop');
     const id = crypto.randomUUID();
+    let shown = false;
     try {
       const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}&progress=1&id=${id}`);
       if (!response.ok) return setStatus((await response.json()).error, true);
@@ -152,7 +178,7 @@
           const event = JSON.parse(line);
           if (event.error) return setStatus(event.error, true);
           if (event.stopped) return setStatus('Scan stopped.');
-          if (event.result) return show(event.result);
+          if (event.result) { shown = true; return show(event.result); }
           const { completed, total, current } = event.progress;
           bar.hidden = false;
           if (total) {
@@ -170,6 +196,7 @@
     } catch (error) {
       setStatus(`Cannot reach the Skill Atlas server: ${error.message}`, true);
     } finally {
+      if (!shown) showEmptySkills('No skills.');
       stop.hidden = true;
       stop.disabled = true;
       stop.onclick = null;
@@ -197,10 +224,10 @@
         const searchable = `${name} ${description} ${path} ${skillRepository === repository.id ? '' : skillRepository}`.toLowerCase();
         return words.every((word) => searchable.includes(word));
       });
-      $('skill').replaceChildren();
       $('skills').replaceChildren(...matches.map((skill) => skillOption(skill, repository.id, words)));
-      if (matches.length > 0) select($('skills').firstChild, matches[0]);
-      else if (words.length > 0) $('skill').textContent = 'No matching skills.';
+      if (matches.length > 0) select($('skills').firstChild, matches[0], words);
+      else if (words.length > 0) showEmptySkills('No skill matches.', 'No matching skills.');
+      else showEmptySkills('No skills.');
     }
   }
 
@@ -235,21 +262,72 @@
 
   function skillOption(skill, repositoryId, words) {
     const item = element('li', { role: 'option', tabIndex: 0 },
-        element('div', { className: 'name', textContent: skill.name }),
+        element('div', {},
+          element('span', { className: 'name', textContent: skill.name }),
+          ...(skill.copies.length ? [element('span', { className: 'badge', textContent: `+${skill.copies.length} ${skill.copies.length === 1 ? 'copy' : 'copies'}` })] : [])),
         element('div', { className: 'description' }, ...highlightDescription(skill.description, words)),
         element('div', { className: 'path', textContent: skill.repository === repositoryId ? skill.path : `${skill.repository} · ${skill.path}` }));
-    item.onclick = () => select(item, skill);
-    item.onkeydown = (event) => { if (event.key === 'Enter') select(item, skill); };
+    item.onclick = () => select(item, skill, words);
+    item.onkeydown = (event) => { if (event.key === 'Enter') select(item, skill, words); };
     return item;
   }
 
-  function select(item, skill) {
+  let tab = 'text';
+
+  function select(item, skill, words) {
     for (const other of $('skills').children) other.setAttribute('aria-selected', String(other === item));
+    const tabButton = (id, label, badge) => {
+      const button = element('button', { role: 'tab', id: `tab-${id}`, type: 'button' }, label,
+        ...(badge === undefined ? [] : [element('span', { className: 'badge', textContent: String(badge) })]));
+      button.setAttribute('aria-selected', String(tab === id));
+      button.setAttribute('aria-controls', id);
+      button.onclick = () => activateTab(id);
+      return button;
+    };
+    const lines = skill.text.replace(/\r?\n$/, '').split(/\r?\n/);
+    const headingLines = new Set(skill.headings.map((heading) => heading.line));
+    const text = element('div', { id: 'text', role: 'tabpanel', hidden: tab !== 'text' },
+      ...lines.map((line, index) => {
+        const row = element('div', { textContent: line, className: headingLines.has(index + 1) ? 'heading' : '' });
+        row.dataset.line = String(index + 1);
+        return row;
+      }));
+    const contents = element('ul', { id: 'contents', role: 'tabpanel', hidden: tab !== 'contents' },
+      ...(skill.headings.length === 0
+        ? [element('li', { className: 'empty', textContent: 'No titles in this SKILL.md.' })]
+        : skill.headings.map((heading) => {
+            const link = element('a', { href: `#line-${heading.line}`, textContent: heading.title });
+            link.onclick = (event) => { event.preventDefault(); jump(heading.line); };
+            return element('li', { className: `level-${heading.level}` }, link);
+          })));
     $('skill').replaceChildren(
-      element('h2', { textContent: skill.name }),
-      element('a', { href: skill.link, textContent: skill.link, target: '_blank', rel: 'noopener' }),
-      ...(skill.copies.length > 0 ? [element('div', { className: 'path', textContent: `also in ${skill.copies.join(', ')}` })] : []),
-      element('pre', { textContent: skill.text }));
+      element('div', { id: 'skill-head' },
+        element('h2', { textContent: skill.name }),
+        ...(skill.description ? [element('p', {}, ...highlightDescription(skill.description, words))] : []),
+        element('a', { href: skill.link, textContent: skill.link, target: '_blank', rel: 'noopener' }),
+        ...(skill.copies.length ? [element('div', { className: 'path', textContent: `also in ${skill.copies.join(', ')}` })] : [])),
+      element('div', { role: 'tablist', ariaLabel: 'SKILL.md views' }, tabButton('text', 'SKILL.md'), tabButton('contents', 'Contents', skill.headings.length)),
+      text,
+      contents);
+  }
+
+  function activateTab(id) {
+    tab = id;
+    for (const name of ['text', 'contents']) {
+      $(name).hidden = name !== id;
+      $(`tab-${name}`).setAttribute('aria-selected', String(name === id));
+    }
+  }
+
+  /** From Contents to the title's line in SKILL.md. */
+  function jump(line) {
+    activateTab('text');
+    const row = $('text').querySelector(`[data-line="${line}"]`);
+    $('text').querySelector('.target')?.classList.remove('target');
+    row.classList.add('target');
+    row.tabIndex = -1;
+    row.focus({ preventScroll: true });
+    row.scrollIntoView({ block: 'start' });
   }
 
   $('form').onsubmit = (event) => {

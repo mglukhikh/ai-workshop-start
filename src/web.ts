@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { AtlasError } from './core/errors.ts';
 import type { GitHubOptions } from './core/github.ts';
+import { outline } from './core/outline.ts';
 import { skillLink } from './core/model.ts';
 import { scan, type ScanTarget } from './core/scan.ts';
 
@@ -79,7 +80,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
         onOrganizationProgress: stream ? (progress) => write({ progress }) : undefined,
       }), controller.signal);
       if (disconnected) return;
-      const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) }));
+      const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill), headings: outline(skill.text) }));
       const body = { repository: result.repository, skills, warnings: result.warnings };
       if (!stream) return send(response, 200, body);
       write({ result: body });

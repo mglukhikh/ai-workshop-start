@@ -30,9 +30,9 @@ test('a rate-limited organization scan shows the completed repositories and a wa
     await expect(page.locator('#warnings li')).toHaveText([
       'warning: GitHub rate limit reached; set GITHUB_TOKEN. Showing results from completed repositories.',
     ]);
-    await expect(page.locator('#skills li .path')).toHaveText(['JetBrains/first · tools/.agents/skills/shared/SKILL.md']);
+    await expect(page.locator('#skills [role="option"] .path')).toHaveText(['JetBrains/first · tools/.agents/skills/shared/SKILL.md']);
     await expect(page.locator('#skill h2')).toHaveText('shared');
-    await expect(page.locator('#skill a')).toHaveText(
+    await expect(page.locator('#skill-head a')).toHaveText(
       `https://github.com/JetBrains/first/blob/${COMMIT}/tools/.agents/skills/shared/SKILL.md`);
     await expect(page.locator('#scan')).toBeEnabled();
     await shot(page, 'rate-limited.png');

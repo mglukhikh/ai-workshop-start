@@ -26,13 +26,13 @@ Each command exits with 1 if a check fails.
 
 ```console
 $ node qa/steps.ts fill '#repo' ./fixture click '#scan' expect '#status' '5 skills' \
-    fill '#filter' lint count '#skills li' 2 report shot filter.png
+    fill '#filter' lint count '#skills [role="option"]' 2 report shot filter.png
   open /
   fill #repo = "./fixture"
   click #scan
   PASS #status contains "5 skills"
   fill #filter = "lint"
-  PASS #skills li × 2
+  PASS #skills [role="option"] × 2
   ── status: fixture · 5 skills
   ...
 ```
@@ -53,7 +53,7 @@ $ node qa/steps.ts fill '#repo' ./fixture click '#scan' expect '#status' '5 skil
 
 Selectors are [Playwright selectors](https://playwright.dev/docs/locators), such as `#repo` or
 `role=button[name="Scan"]`. The page's elements are `#repo`, `#scan`, `#status` (`.error` on
-errors), `#warnings li`, `#filter`, `#skills li`, `#skill` (`h2`, `a`, `pre`), `#scan-progress`
+errors), `#warnings li`, `#filter`, `#skills [role="option"]`, `#skill` (`h2`, `#skill-head a`, `#text`, `#contents`), `#scan-progress`
 and `#current-repository`. Relative directories are resolved from the repository root, where the
 server runs. A GitHub URL works too, but it uses the network. Set `GITHUB_TOKEN` to get a higher rate limit.
 

@@ -11,7 +11,7 @@ test('an organization scan shows its progress, then the skills of every reposito
   const current = page.locator('#current-repository');
   const status = page.locator('#status');
   const scan = page.locator('#scan');
-  const skills = page.locator('#skills li');
+  const skills = page.locator('#skills [role="option"]');
 
   github.hold('JetBrains', ...REPOSITORIES);
   await page.goto('/');
@@ -62,7 +62,7 @@ test('an organization scan shows its progress, then the skills of every reposito
       /^warning: JetBrains\/ktor: \.agents\/skills\/plugin\/SKILL\.md: malformed front matter/,
     ]);
     await expect(page.locator('#skill h2')).toHaveText('build-tools-bump-gradle-api');
-    await expect(page.locator('#skill a')).toHaveText(
+    await expect(page.locator('#skill-head a')).toHaveText(
       `https://github.com/JetBrains/kotlin/blob/${COMMIT}/.claude/skills/build-tools-bump-gradle-api/SKILL.md`);
     await shot(page, 'result.png');
   });
@@ -71,7 +71,7 @@ test('an organization scan shows its progress, then the skills of every reposito
     await page.locator('#filter').pressSequentially('ktor', { delay: 40 });
     await expect(skills.locator('.name')).toHaveText(['commits', 'plugin']);
     await expect(page.locator('#skill h2')).toHaveText('commits');
-    await expect(page.locator('#skill pre')).toContainText('Writes commit messages in the Ktor style.');
+    await expect(page.locator('#text')).toContainText('Writes commit messages in the Ktor style.');
     await shot(page, 'filter-repository.png');
   });
 });

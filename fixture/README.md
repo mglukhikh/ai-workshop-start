@@ -6,7 +6,7 @@ A small repository for the tests.
 | --- | --- |
 | `.claude/skills/commits` | a skill |
 | `.github/skills/commits` | its copy for another agent, with different contents |
-| `.github/skills/code-style` | a skill in another agent's folder |
+| `.github/skills/code-style` | a skill in another agent's folder; titles at three levels, a code block, a `####` |
 | `.agents/skills/code-style` | a symbolic link to it: not followed |
 | `.agents/skills/release-checklist` | malformed front matter |
 | `tools/linter/.claude/skills/lint` | a skill of a nested project |
