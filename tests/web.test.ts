@@ -227,6 +227,14 @@ test('the served page filters skills by words and resets on a new scan', async (
     filter.value = value;
     filter.dispatchEvent(new Event('input'));
   };
+  const highlights = () => Array.from(document.querySelectorAll('#skills li[aria-selected=true] mark') as Iterable<HTMLElement>, (node) => node.textContent);
+  type('COMMIT MIT messages');
+  assert.deepEqual(highlights(), ['commit', 'messages', 'commit']);
+  type('linter:');
+  assert.deepEqual(highlights(), ['linter:']);
+  type('release-checklist');
+  assert.deepEqual(highlights(), []);
+  type('');
   assert.equal(filter.hidden, false);
   assert.equal(names().length, 5);
   type('  COMMITS   tools/linter ');
@@ -238,10 +246,12 @@ test('the served page filters skills by words and resets on a new scan', async (
   assert.deepEqual(names(), []);
   assert.equal(document.querySelector('#skill')?.textContent, 'No matching skills.');
   type(' ');
+  assert.deepEqual(highlights(), []);
   assert.equal(names().length, 5);
   type('lint');
   await scanPage(FIXTURE);
   assert.equal(filter.value, '');
+  assert.deepEqual(highlights(), []);
   assert.equal(names().length, 5);
 
   await scanPage(join(FIXTURE, 'no-such-directory'));
