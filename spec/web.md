@@ -45,3 +45,12 @@ The demo tests check Linux Chromium against pixel-exact baselines using vendored
 fonts configured through fontconfig. On other platforms the demo tests are skipped,
 including when running the suite in screenshot update mode. Demo specs inherit
 this guard by importing `test` from the shared demo fixture.
+
+Each checked state is a *key moment* of the test's recorded video, held on screen for a moment.
+After the demo tests, `npm run test:frames` takes the frame at each key moment from the video and
+compares it with its baseline in `tests/demo/frames`:
+- An *important difference* is a region where many neighbouring pixels changed, such as a changed text, a moved panel or a missing button. Sparse changes like compression noise are ignored.
+- Like the demo tests, the comparison is skipped on other platforms than Linux.
+- Important differences, a missing baseline or frame, a different frame size, and a baseline without a key moment fail the comparison.
+- For each failing moment, an image shows the baseline, the frame, and the frame faded with the changed pixels in red and each important difference in a numbered red box. A report lists every moment with its regions. CI writes the report to the job summary.
+- Baselines are made in the cloud on the CI Linux runner, by the *Demo baselines* workflow: the `update-baselines` label on a pull request, or a manual run. An update replaces only screenshots that changed and frames with an important difference or no baseline.

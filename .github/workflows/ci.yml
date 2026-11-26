@@ -28,7 +28,13 @@ jobs:
       - name: Demo tests
         if: ${{ !cancelled() }}
         run: npm run test:demo
-      # The demo videos, the screenshot diffs of a failure and the HTML report, on every run.
+      # The key moments of the videos against baselines made by .github/workflows/baselines.yml;
+      # the important differences go to the job summary and test-results/frames/*-diff.png.
+      - name: Compare the video key moments
+        if: ${{ !cancelled() }}
+        run: npm run test:frames
+      # The demo videos, their key moments with highlighted differences, the screenshot diffs of a
+      # failure and the HTML report, on every run.
       - name: Upload the demo videos
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
