@@ -33,5 +33,5 @@ Skill: id = `repo:path`, name, description, commit, the SKILL.md text
 - Combine skills across repositories, retaining their repository IDs and pinned links. Prefix warnings with the repository ID.
 - Report an error if the organization cannot be listed or a repository scan fails.
 - A GitHub user account URL reports that user accounts are unsupported for organization scans.
-- If GitHub reports fewer remaining requests than the number of unscanned repositories on a listing page, stop before scanning that page and explain how to retry.
+- If GitHub reports fewer remaining requests than twice the number of unscanned repositories on a listing page, stop before scanning that page and explain how to retry.
 - GitHub requests have a 15-second timeout.
