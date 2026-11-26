@@ -19,19 +19,22 @@ export type ScanTarget = Source | { repository: Repository; deadline?: AbortSign
 export type ScanResult = { repository: Repository; skills: Skill[]; warnings: string[] };
 
 /** fetch → find → parse. Nothing is stored: the result is all there is. */
-export async function scan(source: ScanTarget): Promise<ScanResult> {
+export async function scan(source: ScanTarget, stop?: AbortSignal): Promise<ScanResult> {
   if ('sources' in source) {
     const skills: Skill[] = [];
     const warnings: string[] = [];
     try {
       for await (const repository of source.sources()) {
         const result = await scan(repository);
+        stop?.throwIfAborted();
         source.deadline?.throwIfAborted();
         for (const skill of result.skills) skills.push(skill);
         for (const warning of result.warnings) warnings.push(`${repository.repository.id}: ${warning}`);
       }
     } catch (error) {
-      if (source.deadline?.aborted && error === source.deadline.reason) {
+      if (stop?.aborted) {
+        warnings.push('Scan stopped. Showing results from completed repositories.');
+      } else if (source.deadline?.aborted && error === source.deadline.reason) {
         warnings.push('Organization scan reached the 5-minute limit. Showing results from completed repositories.');
       } else if (error instanceof GitHubRateLimitError) {
         warnings.push(`${error.message}. Showing results from completed repositories.`);
@@ -41,9 +44,11 @@ export async function scan(source: ScanTarget): Promise<ScanResult> {
     }
     return { repository: source.repository, skills: sortSkills(skills), warnings };
   }
+  stop?.throwIfAborted();
   const found = findSkills(source.paths);
   // The skills are read at the same time: on GitHub, each file is a request.
   const results = await Promise.all(found.skills.map((file) => readSkill(source, file)));
+  stop?.throwIfAborted();
   const ignored = found.ignored.length > 0 ? [`not in a skills folder, so not a skill: ${list(found.ignored)}`] : [];
   return {
     repository: source.repository,

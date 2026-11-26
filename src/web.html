@@ -73,6 +73,7 @@
   <form id="form">
     <input id="repo" name="repo" placeholder="https://github.com/JetBrains/kotlin, …/tree/&lt;commit | branch&gt;, or a directory" autofocus>
     <button id="scan">Scan</button>
+    <button id="stop" type="button" hidden disabled>Stop Scanning</button>
   </form>
 </header>
 <div id="status" role="status">Paste a repository or organization link and press Scan.</div>
@@ -105,9 +106,26 @@
     setStatus(`Scanning ${repo}…`);
     const bar = $('scan-progress');
     const currentRepository = $('current-repository');
+    const stop = $('stop');
+    const id = crypto.randomUUID();
     try {
-      const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}&progress=1`);
+      const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}&progress=1&id=${id}`);
       if (!response.ok) return setStatus((await response.json()).error, true);
+      stop.hidden = false;
+      stop.disabled = false;
+      stop.onclick = async () => {
+        stop.disabled = true;
+        try {
+          const response = await fetch(`/api/stop?id=${id}`, { method: 'POST' });
+          if (!response.ok) throw new Error();
+        } catch {
+          if (stop.onclick === requestStop) {
+            stop.disabled = false;
+            setStatus('Could not stop the scan.', true);
+          }
+        }
+      };
+      const requestStop = stop.onclick;
       let pending = '';
       for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
         pending += chunk;
@@ -116,6 +134,7 @@
         for (const line of lines) {
           const event = JSON.parse(line);
           if (event.error) return setStatus(event.error, true);
+          if (event.stopped) return setStatus('Scan stopped.');
           if (event.result) return show(event.result);
           const { completed, total, current } = event.progress;
           bar.hidden = false;
@@ -134,6 +153,9 @@
     } catch (error) {
       setStatus(`Cannot reach the Skill Atlas server: ${error.message}`, true);
     } finally {
+      stop.hidden = true;
+      stop.disabled = true;
+      stop.onclick = null;
       bar.hidden = true;
       currentRepository.hidden = true;
       $('scan').disabled = false;

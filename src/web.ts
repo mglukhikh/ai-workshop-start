@@ -20,8 +20,9 @@ const PAGE = new URL('./web.html', import.meta.url);
 /** Starts the server on 127.0.0.1; resolves to its address, `http://127.0.0.1:<port>`. */
 export async function serve({ open, port }: WebOptions): Promise<{ url: string; close(): Promise<void> }> {
   const page = await readFile(PAGE, 'utf8');
+  const activeScans = new Map<string, AbortController>();
   const server = createServer((request, response) => {
-    handle(request, response, page, open).catch((error) => {
+    handle(request, response, page, open, activeScans).catch((error) => {
       send(response, 500, { error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` });
     });
   });
@@ -35,10 +36,16 @@ export async function serve({ open, port }: WebOptions): Promise<{ url: string; 
   return { url, close: () => new Promise((resolve) => server.close(() => resolve())) };
 }
 
-async function handle(request: IncomingMessage, response: ServerResponse, page: string, open: WebOptions['open']) {
+async function handle(request: IncomingMessage, response: ServerResponse, page: string, open: WebOptions['open'], activeScans: Map<string, AbortController>) {
   // Only this machine's own pages: another site's page, through DNS rebinding, names its own host.
   if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(request.headers.host ?? '')) return send(response, 403, { error: 'Forbidden host' });
   const url = new URL(request.url ?? '/', 'http://localhost');
+  const scanId = url.searchParams.get('id');
+  if (request.method === 'POST' && url.pathname === '/api/stop') {
+    if (scanId) activeScans.get(scanId)?.abort();
+    response.writeHead(204).end();
+    return;
+  }
   if (request.method !== 'GET') return send(response, 405, { error: 'Only GET' });
   if (url.pathname === '/') {
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
@@ -48,11 +55,19 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
     const repo = url.searchParams.get('repo')?.trim();
     if (!repo) return send(response, 400, { error: 'A GitHub URL or a directory, please' });
     const controller = new AbortController();
-    response.once('close', () => controller.abort());
+    let disconnected = false;
+    response.once('close', () => {
+      disconnected = true;
+      controller.abort();
+    });
     const stream = url.searchParams.get('progress') === '1';
     const write = (event: unknown) => {
-      if (!controller.signal.aborted) response.write(JSON.stringify(event) + '\n');
+      if (!disconnected) response.write(JSON.stringify(event) + '\n');
     };
+    if (stream && scanId) {
+      if (activeScans.has(scanId)) return send(response, 409, { error: 'Scan ID already in use' });
+      activeScans.set(scanId, controller);
+    }
     if (stream) {
       response.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8' });
       response.flushHeaders();
@@ -62,19 +77,22 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
         signal: controller.signal,
         organizationTimeoutMs: 300_000,
         onOrganizationProgress: stream ? (progress) => write({ progress }) : undefined,
-      }));
-      if (controller.signal.aborted) return;
+      }), controller.signal);
+      if (disconnected) return;
       const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) }));
       const body = { repository: result.repository, skills, warnings: result.warnings };
       if (!stream) return send(response, 200, body);
       write({ result: body });
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (disconnected) return;
       if (!stream) {
         if (error instanceof AtlasError) return send(response, 400, { error: error.message });
         throw error;
       }
-      write({ error: error instanceof AtlasError ? error.message : 'Unexpected scan error' });
+      if (controller.signal.aborted) write({ stopped: true });
+      else write({ error: error instanceof AtlasError ? error.message : 'Unexpected scan error' });
+    } finally {
+      if (stream && scanId) activeScans.delete(scanId);
     }
     response.end();
     return;
