@@ -18,7 +18,7 @@ export default defineConfig({
   retries: 0,
   timeout: 60_000,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
-  // One baseline for every platform: the fonts and the browser build are pinned.
+  // One Linux baseline with pinned fonts and browser build.
   snapshotPathTemplate: '{testDir}/screenshots/{testFileName}/{arg}{ext}',
   expect: {
     toHaveScreenshot: { animations: 'disabled', caret: 'hide', scale: 'css', maxDiffPixels: 0 },
