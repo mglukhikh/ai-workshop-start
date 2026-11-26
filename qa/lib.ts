@@ -19,6 +19,11 @@ export async function startServer(port = 0): Promise<Server> {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'inherit'],
   });
+  const stop = () => {
+    process.off('exit', stop);
+    if (child.exitCode === null) child.kill('SIGINT');
+  };
+  process.once('exit', stop);
   const url = await new Promise<string>((resolve, reject) => {
     let output = '';
     child.stdout!.setEncoding('utf8');
@@ -29,8 +34,6 @@ export async function startServer(port = 0): Promise<Server> {
     });
     child.once('exit', (code) => reject(new Error(`skill-atlas serve exited with ${code}: ${output}`)));
   });
-  const stop = () => { if (child.exitCode === null) child.kill('SIGINT'); };
-  process.once('exit', stop);
   return { url, stop };
 }
 
@@ -160,23 +163,44 @@ export class Tester {
 
 /** Starts the server and a browser, runs `body`, and cleans up; the exit code is 1 on any failure. */
 export async function session(body: (tester: Tester) => Promise<void>, options: BrowserOptions & { keepOpen?: boolean } = {}) {
-  const server = await startServer();
-  const browser = await launch(options);
-  const page = await browser.newPage();
-  const tester = new Tester(page, server.url);
+  const interrupt = () => {
+    if (resumePause) resumePause();
+    else process.exit(130);
+  };
+  if (!process.stdin.isTTY) process.on('SIGINT', interrupt);
   try {
-    await body(tester);
-    if (options.keepOpen) await waitForEnter(`Browser is open at ${server.url}. Press Enter to close.`);
+    const server = await startServer();
+    try {
+      const browser = await launch(options);
+      try {
+        const page = await browser.newPage();
+        const tester = new Tester(page, server.url);
+        await body(tester);
+        if (options.keepOpen) await waitForEnter(`Browser is open at ${server.url}. Press Enter to close.`);
+        return tester.failures;
+      } finally {
+        await browser.close();
+      }
+    } finally {
+      server.stop();
+    }
   } finally {
-    await browser.close();
-    server.stop();
+    process.off('SIGINT', interrupt);
   }
-  return tester.failures;
 }
+
+let resumePause: (() => void) | undefined;
 
 export async function waitForEnter(prompt: string) {
   console.log(prompt);
-  if (!process.stdin.isTTY) return new Promise<void>((resolve) => process.once('SIGINT', () => resolve()));
+  if (!process.stdin.isTTY) {
+    try {
+      await new Promise<void>((resolve) => { resumePause = resolve; });
+    } finally {
+      resumePause = undefined;
+    }
+    return;
+  }
   process.stdin.resume();
   await new Promise((resolve) => process.stdin.once('data', resolve));
   process.stdin.pause();
