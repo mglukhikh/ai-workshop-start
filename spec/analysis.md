@@ -35,3 +35,4 @@ Skill: id = `repo:path`, name, description, commit, the SKILL.md text
 - A GitHub user account URL reports that user accounts are unsupported for organization scans.
 - If GitHub reports fewer remaining requests than twice the number of unscanned repositories on a listing page, stop before scanning that page and explain how to retry.
 - GitHub requests have a 15-second timeout that includes reading the response body. A timeout produces a GitHub connection error.
+- Organization scans have a 3-minute deadline. At that deadline, return skills and warnings from completed repositories with a partial-results warning.
