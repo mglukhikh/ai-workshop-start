@@ -33,6 +33,8 @@ const CELL = 8;
 const CELL_PIXELS = 6;
 /** A region of touching cells is important when at least this many of its pixels differ. */
 const REGION_PIXELS = 40;
+/** Important regions closer than this, in CSS pixels, are one difference: a shifted layout is one box, not many. */
+const MERGE_GAP = 24;
 
 export type Region = { x: number; y: number; width: number; height: number; pixels: number };
 type Result = {
@@ -76,7 +78,34 @@ export function importantRegions(mask: Uint8Array, width: number, height: number
     const y = top * CELL;
     regions.push({ x, y, width: Math.min(width, (right + 1) * CELL) - x, height: Math.min(height, (bottom + 1) * CELL) - y, pixels });
   }
-  return regions.sort((a, b) => b.pixels - a.pixels);
+  return mergeRegions(regions).sort((a, b) => b.pixels - a.pixels);
+}
+
+/** Merges regions that overlap or are closer than MERGE_GAP, until no two are. */
+export function mergeRegions(regions: Region[]): Region[] {
+  const merged = regions.map((region) => ({ ...region }));
+  const near = (a: Region, b: Region) =>
+    a.x - MERGE_GAP < b.x + b.width && b.x - MERGE_GAP < a.x + a.width &&
+    a.y - MERGE_GAP < b.y + b.height && b.y - MERGE_GAP < a.y + a.height;
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let i = 0; i < merged.length; i++) {
+      for (let j = i + 1; j < merged.length; j++) {
+        if (!near(merged[i], merged[j])) continue;
+        const [a, b] = [merged[i], merged[j]];
+        const [x, y] = [Math.min(a.x, b.x), Math.min(a.y, b.y)];
+        merged[i] = {
+          x, y, pixels: a.pixels + b.pixels,
+          width: Math.max(a.x + a.width, b.x + b.width) - x,
+          height: Math.max(a.y + a.height, b.y + b.height) - y,
+        };
+        merged.splice(j, 1);
+        changed = true;
+        j--;
+      }
+    }
+  }
+  return merged;
 }
 
 /** The pixels that differ between two PNG images of the same size, as a 0/1 mask. */
