@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { openGitHub, openGitHubTarget, parseGitHubUrl } from '../src/core/github.ts';
+import { AtlasError } from '../src/core/errors.ts';
 import { parseSkill } from '../src/core/parse.ts';
 import { scan } from '../src/core/scan.ts';
 import { replay } from '../src/core/replay.ts';
@@ -384,4 +385,20 @@ test('an organization scan stops before visiting repositories when the request b
     },
   });
   await assert.rejects(scan(target), { message: /set GITHUB_TOKEN/ });
+});
+
+test('a GitHub timeout while reading a response body produces an AtlasError', async (t) => {
+  const abort = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
+    assert.equal(milliseconds, 15_000);
+    return abort.signal;
+  });
+  await assert.rejects(openGitHub('https://github.com/JetBrains/example', {
+    fetch: async (_url, init) => new Response(new ReadableStream({
+      pull(controller) {
+        init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason), { once: true });
+        abort.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+      },
+    })),
+  }), (error) => error instanceof AtlasError && /Cannot reach GitHub: .*timeout/.test(error.message));
 });

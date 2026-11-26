@@ -172,31 +172,42 @@ function client({ fetch, token }: GitHubOptions) {
   if (token) headers.Authorization = `Bearer ${token}`;
   const answers = new Map<string, Promise<unknown>>(); // the root tree is asked for once per skill root
 
-  async function get(url: string, init?: { headers: Record<string, string> }): Promise<Response> {
+  async function get<T>(
+    url: string,
+    requestHeaders: Record<string, string> | undefined,
+    read: (response: Response, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const signal = AbortSignal.timeout(15_000);
     try {
-      return await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
+      const response = await fetch(url, { headers: requestHeaders, signal });
+      return await read(response, signal);
     } catch (error) {
+      if (error instanceof AtlasError) throw error;
       throw new AtlasError(`Cannot reach GitHub: ${describe(error)}`);
     }
   }
 
   async function request(url: string, notFound: string, notFoundStatuses: number[], emptyStatus?: number, onSuccess?: (response: Response, body: unknown) => void): Promise<unknown> {
-    const response = await get(url, { headers });
-    if (response.ok) {
-      const body: unknown = await response.json();
-      onSuccess?.(response, body);
-      return body;
-    }
-    if (response.status === emptyStatus) return undefined;
-    const body: unknown = await response.json().catch(() => undefined);
-    const message = (body as { message?: unknown } | undefined)?.message;
-    const text = typeof message === 'string' ? message : '';
-    if (notFoundStatuses.includes(response.status)) throw new AtlasError(notFound);
-    if ((response.status === 403 || response.status === 429) && /rate limit/i.test(text)) {
-      throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
-    }
-    if (response.status === 401) throw new AtlasError('GitHub rejected the token in GITHUB_TOKEN');
-    throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
+    return get(url, headers, async (response, signal) => {
+      if (response.ok) {
+        const body: unknown = await response.json();
+        onSuccess?.(response, body);
+        return body;
+      }
+      if (response.status === emptyStatus) return undefined;
+      const body: unknown = await response.json().catch((error: unknown) => {
+        if (signal.aborted) throw error;
+        return undefined;
+      });
+      const message = (body as { message?: unknown } | undefined)?.message;
+      const text = typeof message === 'string' ? message : '';
+      if (notFoundStatuses.includes(response.status)) throw new AtlasError(notFound);
+      if ((response.status === 403 || response.status === 429) && /rate limit/i.test(text)) {
+        throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
+      }
+      if (response.status === 401) throw new AtlasError('GitHub rejected the token in GITHUB_TOKEN');
+      throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
+    });
   }
 
   return {
@@ -207,10 +218,12 @@ function client({ fetch, token }: GitHubOptions) {
     },
     /** A file's bytes at the scanned commit, or undefined if it is not there. */
     async raw(url: string, authenticated = false): Promise<Uint8Array | undefined> {
-      const response = await get(url, authenticated ? { headers: { ...headers, Accept: 'application/vnd.github.raw+json' } } : undefined);
-      if (response.status === 404) return undefined;
-      if (!response.ok) throw new AtlasError(`GitHub answered ${response.status} for ${url}`);
-      return new Uint8Array(await response.arrayBuffer());
+      const requestHeaders = authenticated ? { ...headers, Accept: 'application/vnd.github.raw+json' } : undefined;
+      return get(url, requestHeaders, async (response) => {
+        if (response.status === 404) return undefined;
+        if (!response.ok) throw new AtlasError(`GitHub answered ${response.status} for ${url}`);
+        return new Uint8Array(await response.arrayBuffer());
+      });
     },
   };
 }
