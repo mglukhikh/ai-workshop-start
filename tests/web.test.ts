@@ -176,6 +176,25 @@ test('an organization URL works through the same HTTP scan endpoint', async () =
     repos.map((repo) => [repo, sharedPath, `https://github.com/${repo}/blob/${EXAMPLE_COMMIT}/${sharedPath}`]));
 });
 
+test('the served page renders all warnings in a bounded scrollable list alongside skills', async () => {
+  const { document } = parseHTML(await (await fetch(server.url)).text());
+  const { body } = await scan('github.com/JetBrains');
+  const warnings = Array.from({ length: 40 }, (_, index) => `acme/repo${index}: malformed front matter`);
+  runInNewContext(document.querySelector('script')!.textContent! + '\nshow(result);', {
+    document, location: { search: '' }, URLSearchParams, result: { ...body, warnings },
+  });
+
+  const rules = document.querySelector('style')!.textContent!;
+  const warningRule = rules.match(/#warnings\s*\{([^}]+)\}/)?.[1] ?? '';
+  assert.match(warningRule, /max-height:\s*30vh;/);
+  assert.match(warningRule, /overflow:\s*auto;/);
+  assert.match(warningRule, /flex:\s*none;/);
+  assert.equal(document.querySelectorAll('#warnings li').length, warnings.length);
+  assert.equal(document.querySelector('#warnings li:last-child')?.textContent, `warning: ${warnings.at(-1)}`);
+  assert.equal(document.querySelectorAll('#skills li').length, body.skills.length);
+  assert.equal(document.querySelector('#skill h2')?.textContent, 'shared');
+});
+
 test('organization skill rows distinguish the same path in different repositories', async () => {
   const page = await (await fetch(server.url)).text();
   const { document, Event } = parseHTML(page);
