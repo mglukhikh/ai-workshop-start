@@ -1,6 +1,6 @@
 # Repository analysis
 ## Input
-A **GitHub repository** URL, or a local directory
+A **GitHub repository or organization** URL, or a local directory
 ## Output
 Every *project skill* (below): **name**, **description**, **link**
 ## Architecture
@@ -25,3 +25,13 @@ Skill: id = `repo:path`, name, description, commit, the SKILL.md text
 - One name in two projects → *two* skills
 - Symbolic links are not followed: the target is the skill
 - Listed through the tree, and the tree too large for one answer → only the root's skills folders, with a warning
+
+## Organization scan
+
+- List every page of repositories visible to the scan credentials, including private repositories accessible with `GITHUB_TOKEN`.
+- Scan each repository's default-branch commit by tree. If the recursive listing is truncated, scan only the root’s skills folders and warn. Skip empty repositories.
+- Combine skills across repositories, retaining their repository IDs and pinned links. Prefix warnings with the repository ID.
+- Report an error if the organization cannot be listed or a repository scan fails.
+- A GitHub user account URL reports that user accounts are unsupported for organization scans.
+- If GitHub reports fewer remaining requests than the number of unscanned repositories on a listing page, stop before scanning that page and explain how to retry.
+- GitHub requests have a 15-second timeout.

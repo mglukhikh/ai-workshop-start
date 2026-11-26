@@ -5,11 +5,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { AtlasError } from './core/errors.ts';
 import { skillLink } from './core/model.ts';
-import { scan, type Source } from './core/scan.ts';
+import { scan, type ScanTarget } from './core/scan.ts';
 
 export type WebOptions = {
   /** Opens what the user asked to scan, as the CLI does. */
-  open(input: string): Promise<Source>;
+  open(input: string): Promise<ScanTarget>;
   /** 0: any free port. */
   port: number;
 };

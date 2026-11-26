@@ -7,8 +7,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
+import { openGitHub, openGitHubTarget, parseGitHubUrl } from '../src/core/github.ts';
 import { parseSkill } from '../src/core/parse.ts';
+import { scan } from '../src/core/scan.ts';
 import { replay } from '../src/core/replay.ts';
 import type { Recording } from '../src/core/replay.ts';
 import { atlas, CLI, EXAMPLE_COMMIT, FIXTURE } from './helpers.ts';
@@ -268,4 +269,119 @@ test('rate limit → a message that asks for GITHUB_TOKEN', async () => {
   await assert.rejects(openGitHub('https://github.com/JetBrains/MPS', { fetch: limited }), {
     message: 'GitHub rate limit reached; set GITHUB_TOKEN',
   });
+});
+
+test('organization scan paginates, skips empty repositories, and pins skills to their own repositories', async () => {
+  const org = 'https://api.github.com/orgs/JetBrains/repos?per_page=100';
+  const path = 'tools/.agents/skills/shared/SKILL.md';
+  const first = { full_name: 'JetBrains/first', default_branch: 'main' };
+  const second = { full_name: 'JetBrains/second', default_branch: 'main', private: true };
+  const recording: Recording = {
+    [org + '&page=1']: { status: 200, body: [
+      first,
+      ...Array.from({ length: 99 }, (_, i) => ({ full_name: `JetBrains/empty-${i}`, default_branch: 'main' })),
+    ] },
+    [org + '&page=2']: { status: 200, body: [second] },
+  };
+  for (let i = 0; i < 99; i++) {
+    recording[`https://api.github.com/repos/JetBrains/empty-${i}/commits/main`] = { status: 409, body: {} };
+  }
+  for (const repo of [first, second]) {
+    const base = `https://api.github.com/repos/${repo.full_name}`;
+    recording[`${base}/commits/main`] = { status: 200, body: { sha: COMMIT } };
+    recording[`${base}/git/trees/${COMMIT}?recursive=1`] = {
+      status: 200, body: { truncated: false, tree: [{ path, type: 'blob', mode: '100644' }] },
+    };
+    const file = 'private' in repo
+      ? `${base}/contents/${path}?ref=${COMMIT}`
+      : `https://raw.githubusercontent.com/${repo.full_name}/${COMMIT}/${path}`;
+    recording[file] = { status: 200, body: skill('shared', 'Shared skill.') };
+  }
+  const result = await atlas(['scan', 'https://github.com/JetBrains/'], { recording });
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout.split('\n')[0], 'JetBrains · 2 skills');
+  for (const repo of [first, second]) {
+    assert.ok(result.stdout.includes(`https://github.com/${repo.full_name}/blob/${COMMIT}/${path}`));
+  }
+  assert.equal(result.stderr, '');
+});
+
+test('an unknown organization reports an error', async () => {
+  const result = await atlas(['scan', 'github.com/orgs/missing'], {
+    recording: {
+      'https://api.github.com/orgs/missing/repos?per_page=100&page=1': { status: 404, body: {} },
+      'https://api.github.com/users/missing': { status: 404, body: {} },
+    },
+  });
+  assert.equal(result.code, 1);
+  assert.equal(result.stderr, 'Organization not found: https://github.com/missing');
+});
+
+test('a GitHub user URL explains that organization scans require an organization', async () => {
+  const result = await atlas(['scan', 'github.com/person'], {
+    recording: {
+      'https://api.github.com/orgs/person/repos?per_page=100&page=1': { status: 404, body: {} },
+      'https://api.github.com/users/person': { status: 200, body: { type: 'User' } },
+    },
+  });
+  assert.equal(result.code, 1);
+  assert.equal(result.stderr, 'GitHub user accounts are unsupported for organization scans: https://github.com/person');
+});
+
+const limitedOrganization: Recording = {
+  'https://api.github.com/orgs/JetBrains/repos?per_page=100&page=1': {
+    status: 200, body: [{ full_name: 'JetBrains/huge', default_branch: 'main' }],
+  },
+  'https://api.github.com/repos/JetBrains/huge/commits/main': { status: 200, body: { sha: COMMIT } },
+};
+
+test('an organization scan limits truncated trees to root skills folders and prefixes warnings', async () => {
+  const tree = (sha: string) => `https://api.github.com/repos/JetBrains/huge/git/trees/${sha}`;
+  const path = '.agents/skills/shared/SKILL.md';
+  const result = await atlas(['scan', 'github.com/JetBrains'], {
+    recording: {
+      ...limitedOrganization,
+      [`${tree(COMMIT)}?recursive=1`]: { status: 200, body: { truncated: true, tree: [] } },
+      [tree(COMMIT)]: { status: 200, body: { tree: [
+        { path: '.agents', type: 'tree', sha: 'agents' },
+        { path: 'tools', type: 'tree', sha: 'tools' },
+      ] } },
+      [tree('agents')]: { status: 200, body: { tree: [{ path: 'skills', type: 'tree', sha: 'skills' }] } },
+      [`${tree('skills')}?recursive=1`]: {
+        status: 200, body: { tree: [{ path: 'shared/SKILL.md', type: 'blob', mode: '100644' }] },
+      },
+      [`https://raw.githubusercontent.com/JetBrains/huge/${COMMIT}/${path}`]: {
+        status: 200, body: skill('shared', 'Shared skill.'),
+      },
+    },
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^JetBrains · 1 skill\b/);
+  assert.ok(result.stdout.includes(`https://github.com/JetBrains/huge/blob/${COMMIT}/${path}`));
+  assert.match(result.stderr, /JetBrains\/huge: the tree is too large to list at once; looked only in /);
+});
+
+test('a failed repository scan reports an error for the organization', async () => {
+  const result = await atlas(['scan', 'github.com/JetBrains'], {
+    recording: {
+      ...limitedOrganization,
+      [`https://api.github.com/repos/JetBrains/huge/git/trees/${COMMIT}?recursive=1`]: { status: 500, body: {} },
+    },
+  });
+  assert.equal(result.code, 1);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /GitHub answered 500 .*\/repos\/JetBrains\/huge\/git\/trees\//);
+});
+
+test('an organization scan stops before visiting repositories when the request budget is insufficient', async () => {
+  const target = await openGitHubTarget('https://github.com/JetBrains', {
+    fetch: async (url, init) => {
+      assert.equal(url, 'https://api.github.com/orgs/JetBrains/repos?per_page=100&page=1');
+      assert.ok(init?.signal);
+      return Response.json([{ full_name: 'JetBrains/first', default_branch: 'main' }], {
+        headers: { 'x-ratelimit-remaining': '0' },
+      });
+    },
+  });
+  await assert.rejects(scan(target), { message: /set GITHUB_TOKEN/ });
 });
