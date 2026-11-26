@@ -102,6 +102,27 @@ test('an unreachable repository or an empty field → the clear message, status 
   assert.equal((await scan(' ')).status, 400);
 });
 
+test('the served page displays the streamed scan error', async () => {
+  const { document } = parseHTML(await (await fetch(server.url)).text());
+  const missing = join(FIXTURE, 'no-such-directory');
+  await runInNewContext(
+    document.querySelector('script')!.textContent! + '\nscan(missing);',
+    {
+      document, missing, URLSearchParams, TextDecoderStream, location: { search: '' },
+      fetch: async (path: string) => {
+        const url = new URL(path, server.url);
+        assert.equal(url.searchParams.get('progress'), '1');
+        const response = await fetch(url);
+        assert.equal(response.status, 200);
+        return response;
+      },
+    },
+  );
+  const status = document.querySelector('#status')!;
+  assert.equal(status.textContent, `Not a GitHub URL or a readable directory: ${missing}`);
+  assert.equal(status.className, 'error');
+});
+
 test('only this machine: another host name → 403; an unknown path → 404', async () => {
   const status = await new Promise<number>((resolve, reject) => {
     request(server.url, { headers: { host: 'attacker.example' } }, (response) => resolve(response.statusCode ?? 0)).on('error', reject).end();
