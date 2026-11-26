@@ -8,7 +8,7 @@ export type Fetch = (url: string, init?: { headers?: Record<string, string>; sig
 export type GitHubOptions = {
   fetch: Fetch;
   signal?: AbortSignal;
-  onRepositoryScanned?(id: string, completed: number): void;
+  onOrganizationProgress?(progress: { completed: number; total?: number; current?: string }): void;
   /** With a token, skills are found through code search; without it, through the tree. */
   token?: string;
 };
@@ -34,11 +34,16 @@ type GitHubRepository = { full_name: string; default_branch: string; private?: b
 export async function openGitHubTarget(input: string, options: GitHubOptions): Promise<ScanTarget> {
   const organization = parseGitHubOrganization(input);
   if (!organization) return openGitHub(input, options);
-  const github = client(options);
+  const deadline = AbortSignal.timeout(180_000);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  const scanOptions = { ...options, signal };
+  const github = client(scanOptions);
   const url = `https://github.com/${organization}`;
   return {
     repository: { id: organization, organization, name: organization, url, commit: '' },
+    deadline,
     async *sources() {
+      options.onOrganizationProgress?.({ completed: 0 });
       const seen = new Set<string>();
       for (let page = 1; ; page++) {
         const notFound = `Organization not found: ${url}`;
@@ -66,12 +71,15 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
             ? `GitHub user accounts are unsupported for organization scans: ${url}`
             : notFound);
         }
+        const total = repos.length < 100 ? new Set([...seen, ...repos.map((repo) => repo.full_name)]).size : undefined;
         for (const repo of repos) {
           if (seen.has(repo.full_name)) continue;
+          signal.throwIfAborted();
+          options.onOrganizationProgress?.({ completed: seen.size, total, current: repo.full_name });
           seen.add(repo.full_name);
-          const source = await openRepository(client(options), repo, undefined, false, true);
+          const source = await openRepository(client(scanOptions), repo, undefined, false, true);
           if (source) yield source;
-          options.onRepositoryScanned?.(repo.full_name, seen.size);
+          options.onOrganizationProgress?.({ completed: seen.size, total });
         }
         if (repos.length < 100) return;
       }
@@ -187,6 +195,7 @@ function client({ fetch, token, signal: scanSignal }: GitHubOptions) {
       const response = await fetch(url, { headers: requestHeaders, signal });
       return await read(response, signal);
     } catch (error) {
+      scanSignal?.throwIfAborted();
       if (error instanceof AtlasError) throw error;
       throw new AtlasError(`Cannot reach GitHub: ${describe(error)}`);
     }

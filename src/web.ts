@@ -10,7 +10,7 @@ import { scan, type ScanTarget } from './core/scan.ts';
 
 export type WebOptions = {
   /** Opens what the user asked to scan, as the CLI does. */
-  open(input: string, options: Pick<GitHubOptions, 'signal' | 'onRepositoryScanned'>): Promise<ScanTarget>;
+  open(input: string, options: Pick<GitHubOptions, 'signal' | 'onOrganizationProgress'>): Promise<ScanTarget>;
   /** 0: any free port. */
   port: number;
 };
@@ -60,7 +60,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
     try {
       const result = await scan(await open(repo, {
         signal: controller.signal,
-        onRepositoryScanned: stream ? (id, completed) => write({ progress: { id, completed } }) : undefined,
+        onOrganizationProgress: stream ? (progress) => write({ progress }) : undefined,
       }));
       if (controller.signal.aborted) return;
       const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) }));

@@ -7,7 +7,7 @@ import { openTarget } from './open.ts';
 import { serve } from './web.ts';
 
 const token = process.env.GITHUB_TOKEN || undefined;
-const open = (input: string, options?: Pick<GitHubOptions, 'signal' | 'onRepositoryScanned'>) =>
+const open = (input: string, options?: Pick<GitHubOptions, 'signal' | 'onOrganizationProgress'>) =>
   openTarget(input, { fetch, token, ...options });
 
 process.exitCode = await run(process.argv.slice(2), {
