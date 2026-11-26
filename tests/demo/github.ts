@@ -74,8 +74,6 @@ export class SimulatedGitHub {
   private readonly answer: Fetch;
   private readonly held = new Map<string, PromiseWithResolvers<void>>();
   private readonly rateLimited = new Set<string>();
-  /** The quota GitHub reports on the organization listing; `undefined` for none. */
-  remaining?: number;
 
   constructor(recording: Recording) { this.answer = replay(recording); }
 
@@ -103,8 +101,6 @@ export class SimulatedGitHub {
     if (repository && this.rateLimited.has(repository)) {
       return new Response(null, { status: 403, headers: { 'x-ratelimit-remaining': '0' } });
     }
-    const response = await this.answer(url, init);
-    if (url.includes('/orgs/') && this.remaining !== undefined) response.headers.set('x-ratelimit-remaining', String(this.remaining));
-    return response;
+    return this.answer(url, init);
   };
 }

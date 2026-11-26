@@ -4,6 +4,8 @@
 import { expect, shot, test } from './fixtures.ts';
 import { COMMIT, ORGANIZATION_SCAN, ORGANIZATION_SCAN_REPOSITORIES as REPOSITORIES } from './github.ts';
 
+test.skip(process.platform !== 'linux', 'Demo screenshots require Linux fontconfig.');
+
 test.use({ recording: ORGANIZATION_SCAN });
 
 test('an organization scan shows its progress, then the skills of every repository', async ({ page, github }) => {

@@ -4,12 +4,13 @@
 import { expect, shot, test } from './fixtures.ts';
 import { COMMIT, RATE_LIMITED } from './github.ts';
 
+test.skip(process.platform !== 'linux', 'Demo screenshots require Linux fontconfig.');
+
 const viewport = { width: 1000, height: 640 };
 // As in the demo, no GITHUB_TOKEN: the warning suggests one.
 test.use({ recording: RATE_LIMITED, token: '', viewport, video: { mode: 'on', size: viewport } });
 
 test('a rate-limited organization scan shows the completed repositories and a warning', async ({ page, github }) => {
-  github.remaining = 2;
   github.rateLimit('JetBrains/second');
   github.hold('JetBrains/second');
   await page.goto('/');
