@@ -16,7 +16,8 @@ repository ID and pinned link. Each skill row shows its repository ID before the
 
 The page disables Scan while it waits. Organization scans show a progress bar, a
 completed repository count (including empty repositories), and the current
-repository below the bar. The bar is indeterminate until the total is known.
+repository below the bar. The bar is indeterminate until a total is available. For paginated listings, GitHub’s last-page link
+provides an upper bound. The final short page supplies the exact total.
 The page requests newline-delimited JSON with `progress=1` to receive progress
 and then the result or error. At the 3-minute deadline it displays skills from
 completed repositories and a warning. If the client disconnects, the server
