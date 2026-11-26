@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PNG } from 'pngjs';
-import { differingPixels, importantRegions } from './demo/frames.ts';
+import { differingPixels, importantRegions, mergeRegions } from './demo/frames.ts';
 
 const WIDTH = 200;
 const HEIGHT = 120;
@@ -48,4 +48,27 @@ test('two separate changes are two regions, the larger first', () => {
   });
   const regions = importantRegions(differingPixels(frame(), changed), WIDTH, HEIGHT);
   assert.deepEqual(regions.map((region) => region.pixels), [30 * 60, 10 * 20]);
+});
+
+test('changes close together, such as the lines of a shifted panel, are one region', () => {
+  const changed = frame((set) => {
+    for (const top of [10, 30, 50]) for (let y = top; y < top + 8; y++) for (let x = 20; x < 120; x++) set(x, y, [0, 0, 0]);
+  });
+  const regions = importantRegions(differingPixels(frame(), changed), WIDTH, HEIGHT);
+  assert.equal(regions.length, 1);
+  assert.equal(regions[0].pixels, 3 * 8 * 100);
+  assert.ok(regions[0].y <= 10 && regions[0].y + regions[0].height >= 58);
+});
+
+test('merging joins overlapping and near regions, transitively, and keeps far ones apart', () => {
+  const merged = mergeRegions([
+    { x: 0, y: 0, width: 10, height: 10, pixels: 50 },
+    { x: 20, y: 0, width: 10, height: 10, pixels: 50 },
+    { x: 40, y: 0, width: 10, height: 10, pixels: 50 },
+    { x: 150, y: 100, width: 10, height: 10, pixels: 50 },
+  ]);
+  assert.deepEqual(merged, [
+    { x: 0, y: 0, width: 50, height: 10, pixels: 150 },
+    { x: 150, y: 100, width: 10, height: 10, pixels: 50 },
+  ]);
 });
