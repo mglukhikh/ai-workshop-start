@@ -14,5 +14,8 @@ An organization URL works in the same field and API parameter. The response's
 `repository.id` is the organization name, and each skill retains its own
 repository ID and pinned link. Each skill row shows its repository ID before the path.
 
-The page shows that a scan is pending and disables Scan while it waits. After
-one minute without a complete response, the page shows a timeout and enables Scan.
+The page disables Scan while it waits. For organization scans it shows a running
+count and the latest repository checked, including empty repositories. The page
+requests newline-delimited JSON with `progress=1` to receive progress and then
+the result or error. If the client disconnects, the server cancels in-flight
+GitHub requests and stops issuing new ones.
