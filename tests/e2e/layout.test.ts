@@ -35,6 +35,9 @@ test('the skill list and document scroll independently on desktop and stack on m
   const heading = document.getByRole('heading', { name: 'skill-60' });
   await lastSkill.click();
   await expect(heading).toBeInViewport();
+  const filter = page.locator('#filter');
+  await expect(filter).toBeVisible();
+  assert.equal((await filter.boundingBox())!.height, (await page.locator('#repo').boundingBox())!.height);
   assert.equal(await page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY), 0);
   const desktopList = (await list.boundingBox())!;
   const desktopDocument = (await document.boundingBox())!;
