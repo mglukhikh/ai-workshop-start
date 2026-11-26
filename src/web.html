@@ -47,6 +47,7 @@
   #status, #current-repository { padding: 8px 16px; color: var(--muted); overflow-wrap: anywhere; }
   #scan-progress, #filter { margin: 0 16px 8px; width: calc(100% - 32px); accent-color: var(--accent); }
   #status.error { color: var(--accent); }
+  #toggle-warnings { align-self: flex-start; margin: 0 16px 8px; }
   #warnings { flex: none; max-height: 30vh; overflow: auto; margin: 0; padding: 0 16px 0 32px; color: #754318; font-size: 14px; }
   main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); border-top: 1px solid var(--border); }
   #skills { list-style: none; margin: 0; padding: 0; border-right: 4px double var(--border); overflow: auto; overflow-wrap: anywhere; }
@@ -79,7 +80,8 @@
 <div id="status" role="status">Paste a repository or organization link and press Scan.</div>
 <progress id="scan-progress" aria-label="Organization scan progress" hidden></progress>
 <div id="current-repository" role="status" hidden></div>
-<ul id="warnings"></ul>
+<button id="toggle-warnings" type="button" aria-controls="warnings" aria-expanded="false" hidden>Show warnings</button>
+<ul id="warnings" hidden></ul>
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
   <ul id="skills" role="listbox" aria-label="Skills"></ul>
@@ -97,10 +99,23 @@
 
   function setStatus(text, error = false) { $('status').textContent = text; $('status').className = error ? 'error' : ''; }
 
+  const warningsPanel = $('warnings');
+  const warningsToggle = $('toggle-warnings');
+
+  function setWarningsExpanded(expanded) {
+    warningsPanel.hidden = !expanded;
+    warningsToggle.textContent = expanded ? 'Hide warnings' : 'Show warnings';
+    warningsToggle.setAttribute('aria-expanded', String(expanded));
+  }
+
+  warningsToggle.onclick = () => setWarningsExpanded(warningsPanel.hidden);
+
   async function scan(repo) {
     $('scan').disabled = true;
     $('scan').textContent = 'Scanning…';
-    $('skills').replaceChildren(); $('skill').replaceChildren(); $('warnings').replaceChildren();
+    $('skills').replaceChildren(); $('skill').replaceChildren(); warningsPanel.replaceChildren();
+    warningsToggle.hidden = true;
+    setWarningsExpanded(false);
     $('filter').hidden = true;
     $('filter').value = '';
     setStatus(`Scanning ${repo}…`);
@@ -165,7 +180,9 @@
 
   function show({ repository, skills, warnings }) {
     setStatus(`${repository.id} · ${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`);
-    $('warnings').replaceChildren(...warnings.map((text) => element('li', { textContent: `warning: ${text}` })));
+    warningsPanel.replaceChildren(...warnings.map((text) => element('li', { textContent: `warning: ${text}` })));
+    warningsToggle.hidden = warnings.length === 0;
+    setWarningsExpanded(warnings.length > 0);
     const filter = $('filter');
     filter.hidden = skills.length === 0;
     filter.oninput = renderSkills;

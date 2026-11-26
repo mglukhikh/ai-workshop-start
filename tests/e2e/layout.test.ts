@@ -69,3 +69,54 @@ test('the skill list and document scroll independently on desktop and stack on m
     return pane.scrollTop > 0;
   }));
 });
+
+test('warnings can be hidden and restored, and reset on a new scan', async (t) => {
+  const server = await serve({ open: openTarget, port: 0 });
+  t.after(() => server.close());
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage({
+    viewport: { width: 800, height: 700 },
+    recordVideo: process.env.ATLAS_DEMO_DIR ? { dir: process.env.ATLAS_DEMO_DIR } : undefined,
+  });
+  let warnings = ['Malformed front matter', 'Duplicate skill'];
+  await page.route('**/api/scan?*', (route) => route.fulfill({
+    contentType: 'application/x-ndjson',
+    body: JSON.stringify({ result: { repository: { id: 'example' }, skills: [], warnings } }) + '\n',
+  }));
+  await page.goto(server.url);
+  const toggle = page.locator('#toggle-warnings');
+  const panel = page.locator('#warnings');
+  await expect(toggle).toBeHidden();
+  await page.locator('#repo').fill('./fixture');
+  await page.locator('#scan').click();
+  await expect(panel.locator('li')).toHaveCount(2);
+  await expect(panel).toBeVisible();
+  await expect(toggle).toHaveAccessibleName('Hide warnings');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+  const pauseForDemo = async () => {
+    if (process.env.ATLAS_DEMO_DIR) await page.waitForTimeout(1300);
+  };
+  await pauseForDemo();
+  await toggle.click();
+  await expect(panel).toBeHidden();
+  assert.equal(await panel.boundingBox(), null);
+  await expect(toggle).toHaveAccessibleName('Show warnings');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await pauseForDemo();
+  await toggle.press('Enter');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('li')).toHaveText(warnings.map((warning) => 'warning: ' + warning));
+  await pauseForDemo();
+
+  await toggle.click();
+  await page.locator('#scan').click();
+  await expect(panel).toBeVisible();
+  warnings = [];
+  await page.locator('#scan').click();
+  await expect(page.locator('#status')).toHaveText('example · 0 skills');
+  await expect(toggle).toBeHidden();
+  await expect(panel).toBeHidden();
+  await page.close();
+});
