@@ -7,6 +7,8 @@ export type Fetch = (url: string, init?: { headers?: Record<string, string>; sig
 
 export type GitHubOptions = {
   fetch: Fetch;
+  signal?: AbortSignal;
+  onRepositoryScanned?(id: string, completed: number): void;
   /** With a token, skills are found through code search; without it, through the tree. */
   token?: string;
 };
@@ -69,6 +71,7 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
           seen.add(repo.full_name);
           const source = await openRepository(client(options), repo, undefined, false, true);
           if (source) yield source;
+          options.onRepositoryScanned?.(repo.full_name, seen.size);
         }
         if (repos.length < 100) return;
       }
@@ -167,7 +170,7 @@ function files(tree: Tree): string[] {
 
 type Client = ReturnType<typeof client>;
 
-function client({ fetch, token }: GitHubOptions) {
+function client({ fetch, token, signal: scanSignal }: GitHubOptions) {
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   const answers = new Map<string, Promise<unknown>>(); // the root tree is asked for once per skill root
@@ -177,8 +180,10 @@ function client({ fetch, token }: GitHubOptions) {
     requestHeaders: Record<string, string> | undefined,
     read: (response: Response, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
-    const signal = AbortSignal.timeout(15_000);
+    const timeout = AbortSignal.timeout(15_000);
+    const signal = scanSignal ? AbortSignal.any([scanSignal, timeout]) : timeout;
     try {
+      signal.throwIfAborted();
       const response = await fetch(url, { headers: requestHeaders, signal });
       return await read(response, signal);
     } catch (error) {
