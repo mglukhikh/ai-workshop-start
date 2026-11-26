@@ -34,4 +34,4 @@ Skill: id = `repo:path`, name, description, commit, the SKILL.md text
 - Report an error if the organization cannot be listed or a repository scan fails.
 - A GitHub user account URL reports that user accounts are unsupported for organization scans.
 - If GitHub reports fewer remaining requests than twice the number of unscanned repositories on a listing page, stop before scanning that page and explain how to retry.
-- GitHub requests have a 15-second timeout.
+- GitHub requests have a 15-second timeout that includes reading the response body. A timeout produces a GitHub connection error.
