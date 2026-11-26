@@ -171,7 +171,7 @@ test('the served page filters skills by words and resets on a new scan', async (
   const page = await (await fetch(server.url)).text();
   const { document, Event } = parseHTML(page);
   const context = {
-    document, URLSearchParams, location: { search: '' },
+    document, URLSearchParams, AbortSignal, location: { search: '' },
     fetch: (path: string) => fetch(server.url + path),
   };
   runInNewContext(document.querySelector('script')!.textContent!, context);
@@ -208,4 +208,31 @@ test('the served page filters skills by words and resets on a new scan', async (
   await scanPage(join(FIXTURE, 'testData'));
   assert.equal(filter.hidden, true);
   assert.deepEqual(names(), []);
+});
+
+test('the served page shows a pending scan and recovers after a timeout', async () => {
+  const { document } = parseHTML(await (await fetch(server.url)).text());
+  const { promise, reject } = Promise.withResolvers<Response>();
+  const signal = new AbortController().signal;
+  const context = {
+    document, URLSearchParams, location: { search: '' },
+    AbortSignal: { timeout: (ms: number) => { assert.equal(ms, 60_000); return signal; } },
+    fetch: (path: string, options: RequestInit) => {
+      assert.equal(path, '/api/scan?repo=https%3A%2F%2Fgithub.com%2FJetBrains');
+      assert.equal(options.signal, signal);
+      return promise;
+    },
+  };
+  const pending = runInNewContext(
+    document.querySelector('script')!.textContent! + '\nscan("https://github.com/JetBrains");', context,
+  );
+  const button = document.querySelector('#scan')!;
+  assert.equal(button.textContent, 'Scanning…');
+  assert.equal(Reflect.get(button, 'disabled'), true);
+  assert.match(document.querySelector('#status')!.textContent!, /Scanning https:\/\/github.com\/JetBrains/);
+  reject(new DOMException('Timed out', 'TimeoutError'));
+  await pending;
+  assert.match(document.querySelector('#status')!.textContent!, /did not finish within one minute/);
+  assert.equal(button.textContent, 'Scan');
+  assert.equal(Reflect.get(button, 'disabled'), false);
 });

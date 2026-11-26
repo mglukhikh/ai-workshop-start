@@ -39,7 +39,7 @@
     <button id="scan">Scan</button>
   </form>
 </header>
-<div id="status">Paste a repository or organization link and press Scan.</div>
+<div id="status" role="status">Paste a repository or organization link and press Scan.</div>
 <ul id="warnings"></ul>
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
@@ -59,19 +59,25 @@
 
   async function scan(repo) {
     $('scan').disabled = true;
+    $('scan').textContent = 'Scanning…';
     $('skills').replaceChildren(); $('skill').replaceChildren(); $('warnings').replaceChildren();
     $('filter').hidden = true;
     $('filter').value = '';
     setStatus(`Scanning ${repo}…`);
     try {
-      const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}`);
+      const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}`, {
+        signal: AbortSignal.timeout(60_000),
+      });
       const result = await response.json();
       if (!response.ok) return setStatus(result.error, true);
       show(result);
     } catch (error) {
-      setStatus(`Cannot reach the Skill Atlas server: ${error.message}`, true);
+      setStatus(error.name === 'TimeoutError'
+        ? 'The scan did not finish within one minute. Try scanning a single repository.'
+        : `Cannot reach the Skill Atlas server: ${error.message}`, true);
     } finally {
       $('scan').disabled = false;
+      $('scan').textContent = 'Scan';
     }
   }
 
