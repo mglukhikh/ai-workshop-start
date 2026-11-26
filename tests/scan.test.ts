@@ -7,8 +7,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
+import { openGitHub, openGitHubTarget, parseGitHubUrl } from '../src/core/github.ts';
 import { parseSkill } from '../src/core/parse.ts';
+import { scan } from '../src/core/scan.ts';
 import { replay } from '../src/core/replay.ts';
 import type { Recording } from '../src/core/replay.ts';
 import { atlas, CLI, EXAMPLE_COMMIT, FIXTURE } from './helpers.ts';
@@ -370,4 +371,17 @@ test('a failed repository scan reports an error for the organization', async () 
   assert.equal(result.code, 1);
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /GitHub answered 500 .*\/repos\/JetBrains\/huge\/git\/trees\//);
+});
+
+test('an organization scan stops before visiting repositories when the request budget is insufficient', async () => {
+  const target = await openGitHubTarget('https://github.com/JetBrains', {
+    fetch: async (url, init) => {
+      assert.equal(url, 'https://api.github.com/orgs/JetBrains/repos?per_page=100&page=1');
+      assert.ok(init?.signal);
+      return Response.json([{ full_name: 'JetBrains/first', default_branch: 'main' }], {
+        headers: { 'x-ratelimit-remaining': '0' },
+      });
+    },
+  });
+  await assert.rejects(scan(target), { message: /set GITHUB_TOKEN/ });
 });

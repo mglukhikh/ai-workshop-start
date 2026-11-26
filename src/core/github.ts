@@ -3,7 +3,7 @@ import { SKILL_ROOTS } from './find.ts';
 import type { ScanTarget, Source } from './scan.ts';
 
 /** The part of `fetch` the core uses, so tests and the browser can pass their own. */
-export type Fetch = (url: string, init?: { headers?: Record<string, string> }) => Promise<Response>;
+export type Fetch = (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<Response>;
 
 export type GitHubOptions = {
   fetch: Fetch;
@@ -45,6 +45,16 @@ export async function openGitHubTarget(input: string, options: GitHubOptions): P
           notFound,
           [404],
           page === 1 ? 404 : undefined,
+          (response, repositories) => {
+            const remaining = response.headers.get('x-ratelimit-remaining');
+            const unscanned = new Set((repositories as GitHubRepository[])
+              .map((repo) => repo.full_name).filter((id) => !seen.has(id)));
+            if (remaining !== null && unscanned.size > Number(remaining)) {
+              throw new AtlasError(options.token
+                ? 'GitHub rate limit too low to scan this organization; try again after it resets'
+                : 'GitHub rate limit too low to scan this organization; set GITHUB_TOKEN and retry');
+            }
+          },
         );
         if (!repos) {
           const account = await github.json<{ type: string } | undefined>(
@@ -164,15 +174,19 @@ function client({ fetch, token }: GitHubOptions) {
 
   async function get(url: string, init?: { headers: Record<string, string> }): Promise<Response> {
     try {
-      return await fetch(url, init);
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
     } catch (error) {
       throw new AtlasError(`Cannot reach GitHub: ${describe(error)}`);
     }
   }
 
-  async function request(url: string, notFound: string, notFoundStatuses: number[], emptyStatus?: number): Promise<unknown> {
+  async function request(url: string, notFound: string, notFoundStatuses: number[], emptyStatus?: number, onSuccess?: (response: Response, body: unknown) => void): Promise<unknown> {
     const response = await get(url, { headers });
-    if (response.ok) return response.json();
+    if (response.ok) {
+      const body: unknown = await response.json();
+      onSuccess?.(response, body);
+      return body;
+    }
     if (response.status === emptyStatus) return undefined;
     const body: unknown = await response.json().catch(() => undefined);
     const message = (body as { message?: unknown } | undefined)?.message;
@@ -187,8 +201,8 @@ function client({ fetch, token }: GitHubOptions) {
 
   return {
     /** A GitHub API answer; `notFound` explains a 404, or the other `notFoundStatuses`. */
-    json<T>(url: string, notFound = `Not found on GitHub: ${url}`, notFoundStatuses = [404], emptyStatus?: number): Promise<T> {
-      if (!answers.has(url)) answers.set(url, request(url, notFound, notFoundStatuses, emptyStatus));
+    json<T>(url: string, notFound = `Not found on GitHub: ${url}`, notFoundStatuses = [404], emptyStatus?: number, onSuccess?: (response: Response, body: unknown) => void): Promise<T> {
+      if (!answers.has(url)) answers.set(url, request(url, notFound, notFoundStatuses, emptyStatus, onSuccess));
       return answers.get(url) as Promise<T>;
     },
     /** A file's bytes at the scanned commit, or undefined if it is not there. */
