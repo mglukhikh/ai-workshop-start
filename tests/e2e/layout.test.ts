@@ -123,3 +123,27 @@ test('warnings can be hidden and restored, and reset on a new scan', async (t) =
   await expect(panel).toBeHidden();
   await page.close();
 });
+
+test('filter highlights use a gold background and inherit the description color', async (t) => {
+  const server = await serve({ open: openTarget, port: 0 });
+  t.after(() => server.close());
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.goto(`${server.url}/?repo=./fixture`);
+  const filter = page.locator('#filter');
+  await filter.fill('lint');
+  const marks = page.locator('#skills .description mark');
+  await expect(marks).toHaveCount(5);
+  for (const mark of await marks.all()) {
+    await expect(mark).toHaveCSS('background-color', 'rgb(233, 199, 122)');
+    const description = mark.locator('..');
+    const color = await description.evaluate((element) => {
+      const browserWindow = globalThis as unknown as {
+        getComputedStyle(node: typeof element): { color: string };
+      };
+      return browserWindow.getComputedStyle(element).color;
+    });
+    await expect(mark).toHaveCSS('color', color);
+  }
+});

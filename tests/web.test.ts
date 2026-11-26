@@ -227,7 +227,7 @@ test('the served page filters skills by words and resets on a new scan', async (
     filter.value = value;
     filter.dispatchEvent(new Event('input'));
   };
-  const highlights = () => Array.from(document.querySelectorAll('#skills li[aria-selected=true] mark') as Iterable<HTMLElement>, (node) => node.textContent);
+  const highlights = () => Array.from(document.querySelectorAll('#skills .description mark') as Iterable<HTMLElement>, (node) => node.textContent);
   type('COMMIT MIT messages');
   assert.deepEqual(highlights(), ['commit', 'messages', 'commit']);
   type('linter:');
@@ -249,6 +249,8 @@ test('the served page filters skills by words and resets on a new scan', async (
   assert.deepEqual(highlights(), []);
   assert.equal(names().length, 5);
   type('lint');
+  assert.deepEqual(names(), ['commits', 'lint']);
+  assert.deepEqual(highlights(), ['lint', 'lint', 'lint', 'lint', 'lint']);
   await scanPage(FIXTURE);
   assert.equal(filter.value, '');
   assert.deepEqual(highlights(), []);
