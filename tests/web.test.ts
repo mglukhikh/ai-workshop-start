@@ -263,9 +263,15 @@ test('the served page shows organization progress before the final result', asyn
   assert.deepEqual(started, { progress: { current: repos[0], completed: 0, total: 3 } });
   assert.deepEqual(completed, { progress: { completed: 1, total: 3 } });
   const startEnd = events.split('\n', 2).join('\n').length + 1;
-  await writer.write(events.slice(0, startEnd));
-  await new Promise<void>((resolve) => setImmediate(resolve));
   const bar = document.querySelector<HTMLElement>('#scan-progress')!;
+  bar.setAttribute('value', '3');
+  const listingEnd = events.indexOf('\n') + 1;
+  await writer.write(events.slice(0, listingEnd));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(bar.hidden, false);
+  assert.equal(bar.hasAttribute('value'), false);
+  await writer.write(events.slice(listingEnd, startEnd));
+  await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(bar.hidden, false);
   assert.equal(bar.getAttribute('max'), '3');
   assert.equal(bar.getAttribute('value'), '0');
