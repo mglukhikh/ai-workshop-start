@@ -197,16 +197,45 @@
         return words.every((word) => searchable.includes(word));
       });
       $('skill').replaceChildren();
-      $('skills').replaceChildren(...matches.map((skill) => skillOption(skill, repository.id)));
+      $('skills').replaceChildren(...matches.map((skill) => skillOption(skill, repository.id, words)));
       if (matches.length > 0) select($('skills').firstChild, matches[0]);
       else if (words.length > 0) $('skill').textContent = 'No matching skills.';
     }
   }
 
-  function skillOption(skill, repositoryId) {
+  function highlightDescription(description, words) {
+    if (words.length === 0) return [description];
+    const searchable = description.toLowerCase();
+    const matched = new Uint8Array(searchable.length);
+    for (const word of new Set(words)) {
+      for (let start = searchable.indexOf(word); start !== -1; start = searchable.indexOf(word, start + 1)) {
+        matched.fill(1, start, start + word.length);
+      }
+    }
+
+    const parts = [];
+    let offset = 0;
+    let run = '';
+    let highlighted = false;
+    for (const character of description) {
+      const end = offset + character.toLowerCase().length;
+      const matches = matched.subarray(offset, end).includes(1);
+      if (matches !== highlighted) {
+        if (run) parts.push(highlighted ? element('mark', { textContent: run }) : run);
+        run = '';
+        highlighted = matches;
+      }
+      run += character;
+      offset = end;
+    }
+    if (run) parts.push(highlighted ? element('mark', { textContent: run }) : run);
+    return parts;
+  }
+
+  function skillOption(skill, repositoryId, words) {
     const item = element('li', { role: 'option', tabIndex: 0 },
         element('div', { className: 'name', textContent: skill.name }),
-        element('div', { className: 'description', textContent: skill.description }),
+        element('div', { className: 'description' }, ...highlightDescription(skill.description, words)),
         element('div', { className: 'path', textContent: skill.repository === repositoryId ? skill.path : `${skill.repository} · ${skill.path}` }));
     item.onclick = () => select(item, skill);
     item.onkeydown = (event) => { if (event.key === 'Enter') select(item, skill); };
