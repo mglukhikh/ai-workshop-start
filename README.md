@@ -33,6 +33,16 @@ intended visual change, update the baselines on Linux with `npx playwright test 
 (700 by default) holds each checked state on screen in the video. `SLOW_MO=<ms>` (150 by default)
 sets the pause between actions.
 
+`npm run test:frames`, after the demo tests, takes the frame at each checked state from the
+videos and compares it with its baseline in `tests/demo/frames`. Important differences are boxed
+in red in `test-results/frames/*-diff.png`, and `test-results/frames/report.html` lists every
+moment. CI runs this comparison on every run and writes the report to the job summary.
+The baselines for both the screenshots and the frames are made in the cloud on CI's Linux runner.
+Add the `update-baselines` label to a pull request, or run the *Demo baselines* workflow.
+Then download its artifact into `tests/demo`, review the images and commit them:
+`gh run download <run id> -n demo-baselines -D tests/demo`. Video encoding depends on the ffmpeg
+build, so a local comparison against the cloud frames can report differences that CI does not.
+
 Run only one demo suite per machine at a time, even across checkouts. Each run
 recreates the fixture at the same absolute path so screenshots show stable paths.
 

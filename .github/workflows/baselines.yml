@@ -1,0 +1,47 @@
+# The demo baselines, made in the cloud on the same Linux runner as CI: the page screenshots
+# (tests/demo/screenshots) and the video key moments (tests/demo/frames). Run it by adding the
+# label `update-baselines` to a pull request, or from the Actions tab. It changes no branch:
+# download the `demo-baselines` artifact into tests/demo, review the images and commit them:
+#   gh run download <run id> -n demo-baselines -D tests/demo
+name: Demo baselines
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: read
+jobs:
+  baselines:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.label.name == 'update-baselines' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium ffmpeg
+      # Only the screenshots that changed are rewritten; the behaviour checks still have to pass.
+      - run: npx playwright test --update-snapshots=changed
+      # Likewise only the key moments with an important difference, or without a baseline.
+      - run: npm run test:frames -- --update
+      - name: Upload the baselines
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-baselines
+          path: |
+            tests/demo/screenshots/
+            tests/demo/frames/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload the videos and the report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-baselines-run
+          path: test-results/
+          retention-days: 30

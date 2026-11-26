@@ -15,4 +15,5 @@ For changes with visible or interactive behavior, record a short demo and attach
 - `npm ci`: first, in a fresh checkout
 - `npx playwright install --with-deps chromium`: install the browser for layout tests after installing dependencies
 - `npm test`: all tests, including Chromium layout tests
-- `npm run test:demo`: the Linux-only demo tests (tests/demo), with a video of each in `test-results/`; `npx playwright test -u` updates their screenshots on Linux
+- `npm run test:demo`: the Linux-only demo tests (tests/demo), with a video of each in `test-results/`; their screenshot baselines are made in the cloud like the frames below
+- `npm run test:frames`: after the demo tests, compare the videos' key moments with `tests/demo/frames`. Make new baselines in the cloud (label `update-baselines`, *Demo baselines* workflow), never locally
