@@ -39,7 +39,8 @@ async function readSkill(source: Source, file: SkillFile): Promise<{ skill?: Ski
     const rest = await readSkill(source, { ...file, path: copies[0], copies: copies.slice(1) });
     return { skill: rest.skill, warnings: [...warnings, ...rest.warnings] };
   }
-  const parsed = parseSkill(new TextDecoder().decode(bytes));
+  const text = new TextDecoder().decode(bytes);
+  const parsed = parseSkill(text);
   const skill: Skill = {
     id: `${source.repository.id}:${path}`,
     repository: source.repository.id,
@@ -48,6 +49,7 @@ async function readSkill(source: Source, file: SkillFile): Promise<{ skill?: Ski
     description: parsed.description,
     commit: source.repository.commit,
     copies,
+    text,
   };
   if (parsed.warning) warnings.push(`${path}: ${parsed.warning}`);
   return { skill, warnings };

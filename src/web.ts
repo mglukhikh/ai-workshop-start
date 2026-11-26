@@ -1,0 +1,64 @@
+// The local web view: a page with a field for the repository, its skills and their SKILL.md.
+// The same scan as the CLI, over HTTP on this machine only. Nothing is stored.
+import { readFile } from 'node:fs/promises';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { AtlasError } from './core/errors.ts';
+import { skillLink } from './core/model.ts';
+import { scan, type Source } from './core/scan.ts';
+
+export type WebOptions = {
+  /** Opens what the user asked to scan, as the CLI does. */
+  open(input: string): Promise<Source>;
+  /** 0: any free port. */
+  port: number;
+};
+
+const PAGE = new URL('./web.html', import.meta.url);
+
+/** Starts the server on 127.0.0.1; resolves to its address, `http://127.0.0.1:<port>`. */
+export async function serve({ open, port }: WebOptions): Promise<{ url: string; close(): Promise<void> }> {
+  const page = await readFile(PAGE, 'utf8');
+  const server = createServer((request, response) => {
+    handle(request, response, page, open).catch((error) => {
+      send(response, 500, { error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` });
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', (error: NodeJS.ErrnoException) =>
+      reject(error.code === 'EADDRINUSE' ? new AtlasError(`Port ${port} is in use; try another: skill-atlas serve <port>`) : error),
+    );
+    server.listen(port, '127.0.0.1', resolve);
+  });
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return { url, close: () => new Promise((resolve) => server.close(() => resolve())) };
+}
+
+async function handle(request: IncomingMessage, response: ServerResponse, page: string, open: WebOptions['open']) {
+  // Only this machine's own pages: another site's page, through DNS rebinding, names its own host.
+  if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(request.headers.host ?? '')) return send(response, 403, { error: 'Forbidden host' });
+  const url = new URL(request.url ?? '/', 'http://localhost');
+  if (request.method !== 'GET') return send(response, 405, { error: 'Only GET' });
+  if (url.pathname === '/') {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    return void response.end(page);
+  }
+  if (url.pathname === '/api/scan') {
+    const repo = url.searchParams.get('repo')?.trim();
+    if (!repo) return send(response, 400, { error: 'A GitHub URL or a directory, please' });
+    try {
+      const result = await scan(await open(repo));
+      const skills = result.skills.map((skill) => ({ ...skill, link: skillLink(result.repository, skill) }));
+      return send(response, 200, { repository: result.repository, skills, warnings: result.warnings });
+    } catch (error) {
+      if (error instanceof AtlasError) return send(response, 400, { error: error.message });
+      throw error;
+    }
+  }
+  send(response, 404, { error: 'Not found' });
+}
+
+function send(response: ServerResponse, status: number, body: unknown) {
+  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+  response.end(JSON.stringify(body));
+}
