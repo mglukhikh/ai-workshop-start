@@ -38,3 +38,10 @@ returns HTTP 204, including when the ID is unknown or omitted.
 A stopped single-repository scan ends the stream with `{"stopped":true}`.
 The page shows **Scan stopped.** and displays no results. A stopped organization
 scan ends with a result event containing the partial results and warnings.
+
+## Demo screenshots
+
+The demo tests check Linux Chromium against pixel-exact baselines using vendored
+fonts configured through fontconfig. On other platforms the demo tests are skipped,
+including when running the suite in screenshot update mode. Demo specs inherit
+this guard by importing `test` from the shared demo fixture.
