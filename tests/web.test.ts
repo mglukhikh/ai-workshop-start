@@ -1,5 +1,8 @@
 // The decisions in spec/web.md, checked over HTTP on the real server: ./fixture, and the small
 // GitHub repository answered in tests/helpers.ts.
+import { JSDOM } from 'jsdom';
+import { setTimeout as delay } from 'node:timers/promises';
+import { outline } from '../src/core/outline.ts';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -8,7 +11,6 @@ import { request } from 'node:http';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
-import { parseHTML, type HTMLInputElement, type HTMLElement } from 'linkedom';
 import { run } from '../src/commands.ts';
 import { replay } from '../src/core/replay.ts';
 import { openTarget } from '../src/open.ts';
@@ -103,7 +105,7 @@ test('an unreachable repository or an empty field → the clear message, status 
 });
 
 test('the served page displays the streamed scan error', async () => {
-  const { document } = parseHTML(await (await fetch(server.url)).text());
+  const { document } = new JSDOM(await (await fetch(server.url)).text()).window;
   const missing = join(FIXTURE, 'no-such-directory');
   await runInNewContext(
     document.querySelector('script')!.textContent! + '\nscan(missing);',
@@ -177,7 +179,7 @@ test('an organization URL works through the same HTTP scan endpoint', async () =
 });
 
 test('the served page renders all warnings in a bounded scrollable list alongside skills', async () => {
-  const { document } = parseHTML(await (await fetch(server.url)).text());
+  const { document } = new JSDOM(await (await fetch(server.url)).text()).window;
   const { body } = await scan('github.com/JetBrains');
   const warnings = Array.from({ length: 40 }, (_, index) => `acme/repo${index}: malformed front matter`);
   runInNewContext(document.querySelector('script')!.textContent! + '\nshow(result);', {
@@ -191,13 +193,13 @@ test('the served page renders all warnings in a bounded scrollable list alongsid
   assert.match(warningRule, /flex:\s*none;/);
   assert.equal(document.querySelectorAll('#warnings li').length, warnings.length);
   assert.equal(document.querySelector('#warnings li:last-child')?.textContent, `warning: ${warnings.at(-1)}`);
-  assert.equal(document.querySelectorAll('#skills li').length, body.skills.length);
+  assert.equal(document.querySelectorAll('#skills [role="option"]').length, body.skills.length);
   assert.equal(document.querySelector('#skill h2')?.textContent, 'shared');
 });
 
 test('organization skill rows distinguish the same path in different repositories', async () => {
   const page = await (await fetch(server.url)).text();
-  const { document, Event } = parseHTML(page);
+  const { document, Event } = new JSDOM(page).window;
   const { body } = await scan('github.com/JetBrains');
   runInNewContext(document.querySelector('script')!.textContent! + '\nshow(result);', {
     document, location: { search: '' }, URLSearchParams, result: body,
@@ -213,7 +215,7 @@ test('organization skill rows distinguish the same path in different repositorie
 
 test('the served page filters skills by words and resets on a new scan', async () => {
   const page = await (await fetch(server.url)).text();
-  const { document, Event } = parseHTML(page);
+  const { document, Event } = new JSDOM(page).window;
   const context = {
     document, crypto, URLSearchParams, TextDecoderStream, location: { search: '' },
     fetch: (path: string) => fetch(server.url + path),
@@ -237,6 +239,9 @@ test('the served page filters skills by words and resets on a new scan', async (
   type('');
   assert.equal(filter.hidden, false);
   assert.equal(names().length, 5);
+  const badges = Array.from(document.querySelectorAll('#skills [role="option"]') as Iterable<HTMLElement>,
+    (row) => [row.querySelector('.name')?.textContent, row.querySelector('.badge')?.textContent ?? null]);
+  assert.deepEqual(badges.filter(([, badge]) => badge), [['commits', '+1 copy']]);
   type('  COMMITS   tools/linter ');
   assert.deepEqual(names(), ['commits']);
   assert.equal(document.querySelector('#skill h2')?.textContent, 'commits');
@@ -244,6 +249,7 @@ test('the served page filters skills by words and resets on a new scan', async (
   assert.deepEqual(names(), ['code-style']);
   type('impossible-word');
   assert.deepEqual(names(), []);
+  assert.equal(document.querySelector('#skills')?.textContent, 'No skill matches.');
   assert.equal(document.querySelector('#skill')?.textContent, 'No matching skills.');
   type(' ');
   assert.deepEqual(highlights(), []);
@@ -256,7 +262,12 @@ test('the served page filters skills by words and resets on a new scan', async (
   assert.deepEqual(highlights(), []);
   assert.equal(names().length, 5);
 
-  await scanPage(join(FIXTURE, 'no-such-directory'));
+  const failedScan = scanPage(join(FIXTURE, 'no-such-directory'));
+  assert.equal(document.querySelector('#skills')?.textContent, 'Scanning…');
+  assert.equal(document.querySelector('#skill')?.textContent, 'No skill selected.');
+  await failedScan;
+  assert.equal(document.querySelector('#skills')?.textContent, 'No skills.');
+  assert.equal(document.querySelector('#skill')?.textContent, 'No skill selected.');
   assert.equal(filter.hidden, true);
 
   await scanPage(FIXTURE);
@@ -264,10 +275,12 @@ test('the served page filters skills by words and resets on a new scan', async (
   await scanPage(join(FIXTURE, 'testData'));
   assert.equal(filter.hidden, true);
   assert.deepEqual(names(), []);
+  assert.equal(document.querySelector('#skills')?.textContent, 'No skills.');
+  assert.equal(document.querySelector('#skill')?.textContent, 'No skill selected.');
 });
 
 test('the served page shows organization progress before the final result', async () => {
-  const { document } = parseHTML(await (await fetch(server.url)).text());
+  const { document, MutationObserver } = new JSDOM(await (await fetch(server.url)).text()).window;
   const reader = (await fetch(`${server.url}/api/scan?repo=github.com/JetBrains&progress=1`))
     .body!.pipeThrough(new TextDecoderStream()).getReader();
   const { readable, writable } = new TransformStream<string, Uint8Array>({
@@ -276,7 +289,7 @@ test('the served page shows organization progress before the final result', asyn
   const writer = writable.getWriter();
   const status = document.querySelector('#status')!;
   const { promise: progressShown, resolve } = Promise.withResolvers<void>();
-  new document.defaultView.MutationObserver(() => {
+  new MutationObserver(() => {
     if (status.textContent?.includes('Scanned 1 repository')) resolve();
   }).observe(status, { childList: true });
   const pending = runInNewContext(
@@ -507,7 +520,7 @@ test('Stop Scanning cancels a single repository and handles scan IDs', { timeout
   assert.equal((await stopResponse).status(), 204);
   assert.equal(signal?.aborted, true);
   await expect(page.getByText('Scan stopped.', { exact: true })).toBeVisible();
-  await expect(page.locator('#skills')).toBeEmpty();
+  await expect(page.locator('#skills')).toHaveText('No skills.');
   await expect(stop).toBeHidden();
   await expect(page.getByRole('button', { name: 'Scan', exact: true })).toBeEnabled();
   signal = undefined;
@@ -518,4 +531,81 @@ test('Stop Scanning cancels a single repository and handles scan IDs', { timeout
   const stopped = await fetch(`${server.url}/api/stop?id=api-stop-test`, { method: 'POST' });
   assert.equal(stopped.status, 204);
   assert.equal(await stream.text(), '{"stopped":true}\n');
+});
+
+test('Contents: the #, ## and ### titles of each SKILL.md, with their lines; not in code blocks', async () => {
+  const { body } = await scan(FIXTURE);
+  const headings = Object.fromEntries(body.skills.map((skill: any) => [skill.path, skill.headings]));
+  assert.deepEqual(headings['.github/skills/code-style/SKILL.md'], [
+    { level: 1, title: 'Code style', line: 6 },
+    { level: 2, title: 'Kotlin', line: 11 },
+    { level: 3, title: 'Imports', line: 13 },
+    // `# Not a title` is in a code block, `#### Too deep…` is level 4: neither is in the contents.
+    { level: 2, title: 'Java', line: 24 },
+  ]);
+  assert.deepEqual(headings['tools/linter/.claude/skills/lint/SKILL.md'], [{ level: 1, title: 'Lint', line: 6 }]);
+  // Malformed front matter: the titles are still there.
+  assert.deepEqual(headings['.agents/skills/release-checklist/SKILL.md'], [{ level: 1, title: 'Release checklist', line: 6 }]);
+});
+
+test('Contents: Markdown title rules; none → an empty list', () => {
+  const text = [
+    '---', 'description: "# not a title: front matter"', '---',
+    '#hashtag, not a title', '  ## Indented ##  ', '    # four spaces: code', '#', '###',
+    '~~~', '# in a ~~~ block', '```', '# still in it: ``` does not close ~~~', '~~~',
+    '### After the block',
+  ].join('\n') + '\r\n# Windows line ending\r\n';
+  assert.deepEqual(outline(text), [
+    { level: 2, title: 'Indented', line: 5 },
+    { level: 3, title: 'After the block', line: 14 },
+    { level: 1, title: 'Windows line ending', line: 15 },
+  ]);
+  assert.deepEqual(outline('---\nname: x\n---\nNo titles.\n'), []);
+});
+
+test('the served page preserves selection focus, and jumps to numbered lines', async (t) => {
+  const url = `${server.url}/?repo=${encodeURIComponent(FIXTURE)}`;
+  const dom = new JSDOM(await (await fetch(url)).text(), {
+    url,
+    runScripts: 'dangerously',
+    beforeParse(window) {
+      window.TextDecoderStream = TextDecoderStream;
+      window.fetch = (input: string) => fetch(new URL(input, url));
+      window.HTMLElement.prototype.scrollIntoView = function () {
+        this.setAttribute('data-scrolled', 'true');
+      };
+    },
+  });
+  t.after(() => dom.window.close());
+  const { document, KeyboardEvent } = dom.window;
+  for (let attempt = 0; attempt < 100 && !document.querySelector('#skills [role="option"]'); attempt++) {
+    await delay(20);
+  }
+  assert.equal(document.querySelectorAll('#skills [role="option"]').length, 5);
+
+  const skill = document.querySelectorAll<HTMLElement>('#skills [role="option"]')[1];
+  skill.focus();
+  skill.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.equal(document.activeElement, skill);
+  assert.equal(skill.getAttribute('aria-selected'), 'true');
+
+  document.querySelector<HTMLElement>('#skills [role="option"]')!.click();
+  const contentsTab = document.querySelector<HTMLElement>('#tab-contents')!;
+  contentsTab.focus();
+  contentsTab.click();
+  assert.equal(document.activeElement, contentsTab);
+  assert.equal(contentsTab.getAttribute('aria-selected'), 'true');
+
+  const java = Array.from(document.querySelectorAll<HTMLAnchorElement>('#contents a')).find((link) => link.textContent === 'Java');
+  assert.ok(java);
+  assert.equal(java.closest('li')?.className, 'level-2');
+  java.click();
+  assert.equal(document.querySelector('#tab-text')?.getAttribute('aria-selected'), 'true');
+  const rows = Array.from(document.querySelectorAll<HTMLElement>('#text [data-line]'));
+  const source = readFileSync(join(FIXTURE, '.github/skills/code-style/SKILL.md'), 'utf8').replace(/\r?\n$/, '').split(/\r?\n/);
+  assert.deepEqual(rows.map((row) => row.textContent), source);
+  assert.deepEqual(rows.map((row) => Number(row.dataset.line)), source.map((_, index) => index + 1));
+  assert.equal(document.activeElement, rows[23]);
+  assert.equal(rows[23].getAttribute('data-scrolled'), 'true');
+  assert.ok(rows[23].classList.contains('target'));
 });

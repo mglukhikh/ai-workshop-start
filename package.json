@@ -26,9 +26,10 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^24.19.0",
     "@types/pngjs": "^6.0.5",
-    "linkedom": "^0.18.15",
+    "jsdom": "^31.0.1",
     "pixelmatch": "^8.0.0",
     "pngjs": "^7.0.0",
     "typescript": "^7.0.2"

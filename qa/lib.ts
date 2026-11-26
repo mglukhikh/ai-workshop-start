@@ -131,7 +131,7 @@ export class Tester {
     const texts = (selector: string) => this.page.locator(selector).allInnerTexts();
     console.log(`  ── status: ${(await texts('#status')).join('')}`);
     for (const warning of await texts('#warnings li')) console.log(`  ── ${warning}`);
-    for (const skill of await texts('#skills li')) console.log(`  ── skill: ${skill.replace(/\n+/g, ' | ')}`);
+    for (const skill of await texts('#skills [role="option"]')) console.log(`  ── skill: ${skill.replace(/\n+/g, ' | ')}`);
     const selected = await texts('#skill h2');
     if (selected.length) console.log(`  ── selected: ${selected[0]}`);
   }
