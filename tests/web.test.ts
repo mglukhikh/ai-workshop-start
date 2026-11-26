@@ -136,7 +136,8 @@ test('the served page filters skills by words and resets on a new scan', async (
     fetch: (path: string) => fetch(server.url + path),
   };
   runInNewContext(document.querySelector('script')!.textContent!, context);
-  await runInNewContext('scan(' + JSON.stringify(FIXTURE) + ')', context);
+  const scanPage = (repo: string) => runInNewContext('scan(' + JSON.stringify(repo) + ')', context);
+  await scanPage(FIXTURE);
   const filter = document.querySelector<HTMLInputElement>('#filter')!;
   const names = () => Array.from(document.querySelectorAll('#skills .name') as Iterable<HTMLElement>, (node) => node.textContent);
   const type = (value: string) => {
@@ -148,13 +149,24 @@ test('the served page filters skills by words and resets on a new scan', async (
   type('  COMMITS   tools/linter ');
   assert.deepEqual(names(), ['commits']);
   assert.equal(document.querySelector('#skill h2')?.textContent, 'commits');
+  type('KOTLIN');
+  assert.deepEqual(names(), ['code-style']);
   type('impossible-word');
   assert.deepEqual(names(), []);
   assert.equal(document.querySelector('#skill')?.textContent, 'No matching skills.');
   type(' ');
   assert.equal(names().length, 5);
   type('lint');
-  await runInNewContext('scan(' + JSON.stringify(FIXTURE) + ')', context);
+  await scanPage(FIXTURE);
   assert.equal(filter.value, '');
   assert.equal(names().length, 5);
+
+  await scanPage(join(FIXTURE, 'no-such-directory'));
+  assert.equal(filter.hidden, true);
+
+  await scanPage(FIXTURE);
+  assert.equal(filter.hidden, false);
+  await scanPage(join(FIXTURE, 'testData'));
+  assert.equal(filter.hidden, true);
+  assert.deepEqual(names(), []);
 });
