@@ -24,6 +24,8 @@ jobs:
       - run: npx playwright install --with-deps chromium ffmpeg
       # `npm test` in two steps, so the demo tests run and record even when another test fails.
       - run: npm run test:unit
+        env:
+          SKILL_MAP_VIDEO_DIR: skill-map-video
       # The demos in docs/demo as deterministic tests (tests/demo): a video of every test.
       - name: Demo tests
         if: ${{ !cancelled() }}
@@ -43,6 +45,7 @@ jobs:
           path: |
             test-results/
             playwright-report/
+            skill-map-video/skill-map.webm
           if-no-files-found: error
           retention-days: 30
       # The real CLI on real GitHub repositories at fixed commits; the job's token for the rate limit.

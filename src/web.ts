@@ -7,6 +7,7 @@ import { AtlasError } from './core/errors.ts';
 import type { GitHubOptions } from './core/github.ts';
 import { outline } from './core/outline.ts';
 import { skillLink } from './core/model.ts';
+import { clusterWithClaude } from './skill-map.ts';
 import { scan, type ScanTarget } from './core/scan.ts';
 
 export type WebOptions = {
@@ -46,6 +47,35 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
     if (scanId) activeScans.get(scanId)?.abort();
     response.writeHead(204).end();
     return;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/skill-map') {
+    if (request.headers['content-type'] !== 'application/json' || request.headers['sec-fetch-site'] === 'cross-site') {
+      return send(response, 403, { error: 'Expected a local JSON request' });
+    }
+    const controller = new AbortController();
+    response.once('close', () => controller.abort());
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of request.iterator({ destroyOnReturn: false })) {
+      size += chunk.length;
+      if (size > 64_000) return send(response, 413, { error: 'Skill map request is too large' });
+      chunks.push(chunk);
+    }
+    let names: unknown;
+    try { names = JSON.parse(Buffer.concat(chunks).toString()); }
+    catch { return send(response, 400, { error: 'Invalid skill names' }); }
+    if (!Array.isArray(names) || !names.length || !names.every((name) => typeof name === 'string')) {
+      return send(response, 400, { error: 'Expected an array of skill names' });
+    }
+    try {
+      return send(response, 200, await clusterWithClaude(names, controller.signal));
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+      return send(response, 503, { error: missing
+        ? 'Claude CLI is unavailable. Install and authenticate it locally, or use the heuristic.'
+        : 'Claude clustering failed. Check your Claude CLI setup or use the heuristic.' });
+    }
   }
   if (request.method !== 'GET') return send(response, 405, { error: 'Only GET' });
   if (url.pathname === '/') {
