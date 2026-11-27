@@ -209,6 +209,7 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     await expect(map.getByRole('heading', { name: 'commits' })).toBeVisible();
     await expect(map.getByRole('button', { name: 'commits', exact: true })).toHaveCount(2);
     await expect(map.getByRole('heading', { name: 'Other skills' })).toBeVisible();
+    assert.ok((await page.locator('main').boundingBox())!.height >= 200);
     await map.getByRole('button', { name: 'commits', exact: true }).last().scrollIntoViewIfNeeded();
     assert.ok(await map.locator('#map-groups').evaluate((element) => element.scrollTop) > 0);
     await expect(map.locator('summary')).toBeInViewport({ ratio: 1 });
@@ -218,6 +219,7 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     await map.getByRole('button', { name: 'commits', exact: true }).last().click();
     await expect(page.locator('#filter')).toHaveValue('');
     await expect(page.locator('#skills [aria-selected="true"]')).toContainText('tools/linter');
+    if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1500);
     await page.route('**/api/skill-map', async (route) => {
       const names = route.request().postDataJSON() as string[];
       await route.fulfill({ json: [{ label: 'Development', members: names.map((_, index) => index) }] });
@@ -234,6 +236,23 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     await expect(map.getByRole('status')).toHaveText('Claude CLI is unavailable.');
     await map.getByLabel('Grouping').selectOption('heuristic');
     await expect(map.getByRole('heading', { name: 'commits' })).toBeVisible();
+
+    await page.unroute('**/api/skill-map');
+    await page.route('**/api/skill-map', () => {});
+    for (const cancel of [
+      () => map.getByLabel('Grouping').selectOption('heuristic'),
+      () => map.locator('summary').click(),
+      () => page.getByRole('button', { name: 'Scan', exact: true }).click(),
+    ]) {
+      if (!(await map.getByLabel('Grouping').isVisible())) await map.locator('summary').click();
+      await map.getByLabel('Grouping').selectOption('heuristic');
+      const started = page.waitForRequest('**/api/skill-map');
+      await map.getByLabel('Grouping').selectOption('claude');
+      const request = await started;
+      const failed = page.waitForEvent('requestfailed', (failedRequest) => failedRequest === request);
+      await cancel();
+      await failed;
+    }
   } finally {
     await context.close();
     if (process.env.SKILL_MAP_VIDEO_DIR) {
