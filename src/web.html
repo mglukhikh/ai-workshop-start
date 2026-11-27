@@ -52,12 +52,17 @@
   #status.error { color: var(--accent); }
   #toggle-warnings { align-self: flex-start; margin: 0 16px 8px; }
   #warnings { flex: none; max-height: 30vh; overflow: auto; margin: 0; padding: 0 16px 0 32px; color: #754318; font-size: 14px; }
+  #warnings:has(+ #skill-map[open]) { flex-shrink: 1; min-height: 1lh; }
   #skill-map { margin: 0 16px 8px; max-height: 40vh; min-height: 0; }
-  #skill-map[open]:not([hidden]) { display: flex; flex-direction: column; }
+  /* Reserve two control lines and one row of members before shrinking warnings. */
+  #skill-map[open]:not([hidden]) { display: flex; flex-direction: column; min-height: calc(2lh + 26px); }
   #skill-map[open]::details-content { display: flex; flex-direction: column; min-height: 0; }
   #map-status { margin: 0; }
-  #map-groups { min-height: 0; overflow: auto; }
-  #map-groups ul { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; }
+  #map-groups { min-height: 26px; overflow: auto; display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: 6px 12px; align-items: baseline; align-content: start; }
+  #map-groups:empty { min-height: 0; }
+  #map-groups h3 { margin: 0; font-size: inherit; overflow-wrap: anywhere; }
+  #map-groups ul { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+  #map-groups button { padding: 2px 10px; font-size: 14px; line-height: 20px; }
   @media (width > 640px) {
     #skill-map[open] ~ main { min-height: 200px; }
   }
