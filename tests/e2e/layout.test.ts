@@ -210,10 +210,37 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     await expect(map.getByRole('button', { name: 'commits', exact: true })).toHaveCount(2);
     await expect(map.getByRole('heading', { name: 'Other skills' })).toBeVisible();
     assert.ok((await page.locator('main').boundingBox())!.height >= 200);
-    await map.getByRole('button', { name: 'commits', exact: true }).last().scrollIntoViewIfNeeded();
+    for (const chip of await map.getByRole('button').all()) await expect(chip).toBeInViewport({ ratio: 1 });
+    await page.setViewportSize({ width: 800, height: 600 });
+    const lastChip = map.getByRole('button', { name: 'commits', exact: true }).last();
+    await expect(map.getByRole('button').first()).toBeInViewport({ ratio: 1 });
+    await lastChip.scrollIntoViewIfNeeded();
     assert.ok(await map.locator('#map-groups').evaluate((element) => element.scrollTop) > 0);
+    await expect(lastChip).toBeInViewport({ ratio: 1 });
     await expect(map.locator('summary')).toBeInViewport({ ratio: 1 });
     await expect(map.getByLabel('Grouping')).toBeInViewport({ ratio: 1 });
+    const warnings = page.locator('#warnings');
+    await warnings.evaluate((list) => {
+      for (let index = 0; index < 30; index++) {
+        const item = document.createElement('li');
+        item.textContent = 'warning: extra ' + index;
+        list.append(item);
+      }
+    });
+    for (const viewport of [{ width: 800, height: 600 }, { width: 1280, height: 720 }]) {
+      await page.setViewportSize(viewport);
+      assert.ok(await warnings.evaluate((list) => list.scrollHeight > list.clientHeight));
+      assert.ok((await page.locator('main').boundingBox())!.height >= 200);
+      await map.locator('summary').click({ trial: true });
+      await map.getByLabel('Grouping').click({ trial: true });
+      await lastChip.scrollIntoViewIfNeeded();
+      await expect(lastChip).toBeInViewport({ ratio: 1 });
+    }
+    if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1500);
+    await warnings.evaluate((list) => {
+      for (const item of Array.from(list.children).slice(-30)) item.remove();
+    });
+    await page.setViewportSize({ width: 1280, height: 720 });
     if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1500);
     await page.locator('#filter').fill('lint');
     await map.getByRole('button', { name: 'commits', exact: true }).last().click();
@@ -227,6 +254,19 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     await map.getByLabel('Grouping').selectOption('claude');
     await expect(map.getByRole('heading', { name: 'Development' })).toBeVisible();
     if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1200);
+    await page.unroute('**/api/skill-map');
+    const longLabel = 'Code quality, linting and style enforcement tools';
+    await page.route('**/api/skill-map', (route) => route.fulfill({
+      json: [{ label: longLabel, members: [0, 1, 2, 3, 4] }],
+    }));
+    await page.setViewportSize({ width: 375, height: 700 });
+    await map.getByLabel('Grouping').selectOption('heuristic');
+    await map.getByLabel('Grouping').selectOption('claude');
+    await expect(map.getByRole('heading', { name: longLabel })).toBeVisible();
+    assert.ok(await map.locator('#map-groups').evaluate((element) => element.scrollWidth <= element.clientWidth));
+    await expect(map.getByRole('button').first()).toBeInViewport({ ratio: 1 });
+    if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1800);
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.unroute('**/api/skill-map');
     await page.route('**/api/skill-map', (route) => route.fulfill({
       status: 503, json: { error: 'Claude CLI is unavailable.' },
