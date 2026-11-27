@@ -49,6 +49,7 @@ test('Claude grouping invokes the local CLI, validates coverage, and reports fai
   const timed = await serve({ open: openTarget, port: 0, claudeTimeoutMs: 200 });
   t.after(() => timed.close());
   const timeout = await fetch(timed.url + '/api/skill-map', {
+    signal: AbortSignal.timeout(5_000),
     method: 'POST', headers: { 'content-type': 'application/json' }, body: '["lint"]',
   });
   assert.equal(timeout.status, 503);
