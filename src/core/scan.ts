@@ -1,4 +1,4 @@
-import { GitHubRateLimitError } from './errors.ts';
+import { AtlasError, GitHubRateLimitError } from './errors.ts';
 import { findSkills, type SkillFile } from './find.ts';
 import { sortSkills, type Repository, type Skill } from './model.ts';
 import { parseSkill } from './parse.ts';
@@ -22,6 +22,7 @@ export type ScanResult = { repository: Repository; skills: Skill[]; warnings: st
 export async function scan(source: ScanTarget, stop?: AbortSignal): Promise<ScanResult> {
   if ('sources' in source) {
     const skills: Skill[] = [];
+    let completed = 0;
     const warnings: string[] = [];
     try {
       for await (const repository of source.sources()) {
@@ -30,13 +31,14 @@ export async function scan(source: ScanTarget, stop?: AbortSignal): Promise<Scan
         source.deadline?.throwIfAborted();
         for (const skill of result.skills) skills.push(skill);
         for (const warning of result.warnings) warnings.push(`${repository.repository.id}: ${warning}`);
+        completed++;
       }
     } catch (error) {
       if (stop?.aborted) {
         warnings.push('Scan stopped. Showing results from completed repositories.');
       } else if (source.deadline?.aborted && error === source.deadline.reason) {
         warnings.push('Organization scan reached the 5-minute limit. Showing results from completed repositories.');
-      } else if (error instanceof GitHubRateLimitError) {
+      } else if (error instanceof GitHubRateLimitError || (completed > 0 && error instanceof AtlasError)) {
         warnings.push(`${error.message}. Showing results from completed repositories.`);
       } else {
         throw error;
