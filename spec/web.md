@@ -25,8 +25,9 @@ completed repository count (including empty repositories), and the current
 repository below the bar. The bar is indeterminate until a total is available. For paginated listings, GitHub’s last-page link
 provides an upper bound. The final short page supplies the exact total.
 The page requests newline-delimited JSON with `progress=1` to receive progress
-and then a result, error, or stopped event. At the 5-minute deadline or when GitHub rate-limits the scan, it displays skills from
-completed repositories and a warning. If the client disconnects, the server
+and then a result, error, or stopped event. It displays skills from completed repositories and a warning when the scan reaches
+the 5-minute deadline, hits a GitHub rate limit, or encounters another GitHub
+request error after completing at least one repository. If the client disconnects, the server
 cancels in-flight GitHub requests and stops issuing new ones.
 
 - The browser view uses a grimoire-inspired parchment palette, serif typography, and double rules. The skill list sits alongside the document on wide screens, where both panes scroll independently. On short wide screens, the layout keeps a minimum height of 700 px and the page can scroll to reach the panes. On narrow screens the scrollable skill list sits above the document.
