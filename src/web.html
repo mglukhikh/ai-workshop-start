@@ -52,6 +52,15 @@
   #status.error { color: var(--accent); }
   #toggle-warnings { align-self: flex-start; margin: 0 16px 8px; }
   #warnings { flex: none; max-height: 30vh; overflow: auto; margin: 0; padding: 0 16px 0 32px; color: #754318; font-size: 14px; }
+  #skill-map { margin: 0 16px 8px; max-height: 40vh; min-height: 0; }
+  #skill-map[open]:not([hidden]) { display: flex; flex-direction: column; }
+  #skill-map[open]::details-content { display: flex; flex-direction: column; min-height: 0; }
+  #map-status { margin: 0; }
+  #map-groups { min-height: 0; overflow: auto; }
+  #map-groups ul { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; }
+  @media (width > 640px) {
+    #skill-map[open] ~ main { min-height: 200px; }
+  }
   main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); border-top: 1px solid var(--border); }
   #skills { list-style: none; margin: 0; padding: 0; border-right: 4px double var(--border); overflow: auto; overflow-wrap: anywhere; }
   #skills li { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); }
@@ -107,6 +116,17 @@
 <div id="current-repository" role="status" hidden></div>
 <button id="toggle-warnings" type="button" aria-controls="warnings" aria-expanded="false" hidden>Show warnings</button>
 <ul id="warnings" hidden></ul>
+<details id="skill-map" hidden>
+  <summary>Skill map</summary>
+  <label>Grouping
+    <select id="map-mode">
+      <option value="heuristic">Shared words</option>
+      <option value="claude">Claude Haiku</option>
+    </select>
+  </label>
+  <p id="map-status" role="status"></p>
+  <div id="map-groups"></div>
+</details>
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
   <ul id="skills" role="listbox" aria-label="Skills"></ul>
@@ -140,6 +160,25 @@
     $('skill').replaceChildren(element('div', { className: 'empty' }, detailMessage));
   }
 
+  let mapRequest;
+
+  function heuristicGroups(names) {
+    const words = names.map((name) => new Set(name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []));
+    const counts = new Map();
+    for (const tokens of words) {
+      for (const token of tokens) counts.set(token, (counts.get(token) ?? 0) + 1);
+    }
+    const groups = new Map();
+    words.forEach((tokens, index) => {
+      const shared = [...tokens].filter((token) => counts.get(token) > 1);
+      shared.sort((a, b) => counts.get(b) - counts.get(a) || a.localeCompare(b));
+      const label = shared[0] ?? 'Other skills';
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(index);
+    });
+    return Array.from(groups, ([label, members]) => ({ label, members }));
+  }
+
   async function scan(repo) {
     $('scan').disabled = true;
     $('scan').textContent = 'Scanning…';
@@ -147,6 +186,9 @@
     warningsPanel.replaceChildren();
     warningsToggle.hidden = true;
     setWarningsExpanded(false);
+    mapRequest?.abort();
+    $('skill-map').open = false;
+    $('skill-map').hidden = true;
     $('filter').hidden = true;
     $('filter').value = '';
     setStatus(`Scanning ${repo}…`);
@@ -220,6 +262,65 @@
     filter.hidden = skills.length === 0;
     filter.oninput = renderSkills;
     renderSkills();
+    const map = $('skill-map');
+    const mode = $('map-mode');
+    map.hidden = skills.length === 0;
+    mode.value = 'heuristic';
+    map.ontoggle = () => {
+      if (map.open && !map.hidden) void renderMap();
+      else mapRequest?.abort();
+    };
+    mode.onchange = renderMap;
+
+    async function renderMap() {
+      mapRequest?.abort();
+      const request = new AbortController();
+      mapRequest = request;
+      const status = $('map-status');
+      const output = $('map-groups');
+      output.replaceChildren();
+      status.textContent = '';
+      const names = skills.map((skill) => skill.name);
+      try {
+        let groups;
+        if (mode.value === 'claude') {
+          status.textContent = 'Grouping skills with Claude…';
+          const response = await fetch('/api/skill-map', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(names),
+            signal: request.signal,
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error);
+          groups = result;
+        } else {
+          groups = heuristicGroups(names);
+        }
+        if (request.signal.aborted) return;
+        status.textContent = '';
+        for (const { label, members } of groups) {
+          const items = members.map((index) => {
+            const skill = skills[index];
+            const button = element('button', { type: 'button', title: skill.path }, skill.name);
+            button.onclick = () => {
+              if (filter.value) {
+                filter.value = '';
+                renderSkills();
+              }
+              const item = $('skills').children[index];
+              item.click();
+              item.focus();
+              item.scrollIntoView({ block: 'nearest' });
+            };
+            return element('li', {}, button);
+          });
+          output.append(element('h3', {}, label), element('ul', {}, ...items));
+        }
+      } catch (error) {
+        if (!request.signal.aborted) status.textContent = error.message;
+      }
+    }
 
     function renderSkills() {
       const query = filter.value.trim().toLowerCase();
