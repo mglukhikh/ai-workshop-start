@@ -3,6 +3,6 @@
 The automation checkout of a PR branch can be shallow, so the head commit has no common history with `origin/main`. `git diff origin/main...HEAD` fails with "no merge base", and `git show HEAD` lists the whole repository as added.
 
 **Why:** found while reviewing PR #33. Both git commands gave useless output.
-**How to apply:** use `gh pr diff <number>` to see a PR's real changes.
+**How to apply:** use `gh pr diff <number>` to see a PR's real changes. Without `gh`, run `git fetch --unshallow origin` first; then `git diff origin/main...HEAD` works.
 
-Learned: 2026-11-27, review of PR #33
+Learned: 2026-11-27, reviews of PR #33
