@@ -52,11 +52,12 @@
   #status.error { color: var(--accent); }
   #toggle-warnings { align-self: flex-start; margin: 0 16px 8px; }
   #warnings { flex: none; max-height: 30vh; overflow: auto; margin: 0; padding: 0 16px 0 32px; color: #754318; font-size: 14px; }
-  #warnings:has(+ #skill-map[open]) { flex-shrink: 1; min-height: 1lh; }
+  .atlas[data-map-open] #warnings { flex-shrink: 1; min-height: 1lh; }
   #skill-map { margin: 0 16px 8px; max-height: 40vh; min-height: 0; }
   /* Reserve two control lines and one row of members before shrinking warnings. */
-  #skill-map[open]:not([hidden]) { display: flex; flex-direction: column; min-height: calc(2lh + 26px); }
-  #skill-map[open]::details-content { display: flex; flex-direction: column; min-height: 0; }
+  .atlas[data-map-open] #skill-map:not([hidden]) { display: flex; flex-direction: column; min-height: calc(2lh + 26px); }
+  #map-content { display: flex; flex-direction: column; min-height: 0; }
+  #map-toggle:not([open]) + #map-content { display: none; }
   #map-status { margin: 0; }
   #map-groups { min-height: 26px; overflow: auto; display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: 6px 12px; align-items: baseline; align-content: start; }
   #map-groups:empty { min-height: 0; }
@@ -64,7 +65,7 @@
   #map-groups ul { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
   #map-groups button { padding: 2px 10px; font-size: 14px; line-height: 20px; }
   @media (width > 640px) {
-    #skill-map[open] ~ main { min-height: 200px; }
+    .atlas[data-map-open] main { min-height: 200px; }
   }
   main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); border-top: 1px solid var(--border); }
   #skills { list-style: none; margin: 0; padding: 0; border-right: 4px double var(--border); overflow: auto; overflow-wrap: anywhere; }
@@ -121,17 +122,21 @@
 <div id="current-repository" role="status" hidden></div>
 <button id="toggle-warnings" type="button" aria-controls="warnings" aria-expanded="false" hidden>Show warnings</button>
 <ul id="warnings" hidden></ul>
-<details id="skill-map" hidden>
-  <summary>Skill map</summary>
-  <label>Grouping
-    <select id="map-mode">
-      <option value="heuristic">Shared words</option>
-      <option value="claude">Claude Haiku</option>
-    </select>
-  </label>
-  <p id="map-status" role="status"></p>
-  <div id="map-groups"></div>
-</details>
+<div id="skill-map" hidden>
+  <details id="map-toggle">
+    <summary aria-controls="map-content">Skill map</summary>
+  </details>
+  <div id="map-content">
+    <label>Grouping
+      <select id="map-mode">
+        <option value="heuristic">Shared words</option>
+        <option value="claude">Claude Haiku</option>
+      </select>
+    </label>
+    <p id="map-status" role="status"></p>
+    <div id="map-groups"></div>
+  </div>
+</div>
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
   <ul id="skills" role="listbox" aria-label="Skills"></ul>
@@ -140,6 +145,7 @@
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
+  const atlas = document.querySelector('.atlas');
   // Text only, never HTML: the SKILL.md files are the repository's, not ours.
   function element(tag, props = {}, ...children) {
     const node = Object.assign(document.createElement(tag), props);
@@ -192,7 +198,8 @@
     warningsToggle.hidden = true;
     setWarningsExpanded(false);
     mapRequest?.abort();
-    $('skill-map').open = false;
+    $('map-toggle').open = false;
+    atlas.removeAttribute('data-map-open');
     $('skill-map').hidden = true;
     $('filter').hidden = true;
     $('filter').value = '';
@@ -268,11 +275,14 @@
     filter.oninput = renderSkills;
     renderSkills();
     const map = $('skill-map');
+    const toggle = $('map-toggle');
     const mode = $('map-mode');
     map.hidden = skills.length === 0;
     mode.value = 'heuristic';
-    map.ontoggle = () => {
-      if (map.open && !map.hidden) void renderMap();
+    toggle.ontoggle = () => {
+      const open = toggle.open && !map.hidden;
+      atlas.toggleAttribute('data-map-open', open);
+      if (open) void renderMap();
       else mapRequest?.abort();
     };
     mode.onchange = renderMap;
