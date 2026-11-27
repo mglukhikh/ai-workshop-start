@@ -39,6 +39,12 @@ test('the skill list and document scroll independently on desktop and stack on m
   await expect(filter).toBeVisible();
   assert.equal((await filter.boundingBox())!.height, (await page.locator('#repo').boundingBox())!.height);
   assert.equal(await page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY), 0);
+  const contentsTab = document.getByRole('tab', { name: /Contents/ });
+  await expect(contentsTab).toBeInViewport({ ratio: 1 });
+  await contentsTab.click();
+  await expect(document.getByRole('tabpanel')).toHaveText('No titles in this SKILL.md.');
+  await document.getByRole('tab', { name: 'SKILL.md' }).click();
+
   const desktopList = (await list.boundingBox())!;
   const desktopDocument = (await document.boundingBox())!;
   assert.equal(desktopList.y, desktopDocument.y);

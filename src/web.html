@@ -66,7 +66,7 @@
   #skills li.empty { cursor: default; border-bottom: 0; }
   #skills li.empty:hover { background: none; }
   #skill-head p { margin: 4px 0 8px; color: var(--muted); }
-  [role="tablist"] { display: flex; gap: 4px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
+  [role="tablist"] { position: sticky; top: 0; z-index: 1; background: var(--paper); display: flex; gap: 4px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
   [role="tab"] { background: none; color: var(--muted); border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 6px 12px; }
   [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
   #text { margin: 0; padding: 12px 0; font: 13px/1.55 ui-monospace, monospace; border: 1px solid var(--border); border-top: 0; background: var(--paper); }
@@ -327,6 +327,8 @@
     row.classList.add('target');
     row.tabIndex = -1;
     row.focus({ preventScroll: true });
+    const tabs = $('skill').querySelector('[role="tablist"]');
+    row.style.scrollMarginTop = tabs.offsetHeight + 'px';
     row.scrollIntoView({ block: 'start' });
   }
 
