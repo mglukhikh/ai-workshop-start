@@ -52,7 +52,11 @@
   #status.error { color: var(--accent); }
   #toggle-warnings { align-self: flex-start; margin: 0 16px 8px; }
   #warnings { flex: none; max-height: 30vh; overflow: auto; margin: 0; padding: 0 16px 0 32px; color: #754318; font-size: 14px; }
-  #skill-map { margin: 0 16px 8px; max-height: 40vh; overflow: auto; }
+  #skill-map { margin: 0 16px 8px; max-height: 40vh; min-height: 0; }
+  #skill-map[open]:not([hidden]) { display: flex; flex-direction: column; }
+  #skill-map[open]::details-content { display: flex; flex-direction: column; min-height: 0; }
+  #map-status { margin: 0; }
+  #map-groups { min-height: 0; overflow: auto; }
   #map-groups ul { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; }
   @media (width > 640px) {
     #skill-map[open] ~ main { min-height: 200px; }
