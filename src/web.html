@@ -17,18 +17,20 @@
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: clamp(12px, 4vw, 48px);
+    padding: 8px;
     min-height: 100vh;
+    min-height: 100dvh;
     color: var(--ink);
     background: radial-gradient(ellipse at top, #59353a, #261a21 75%);
-    font: 16px/1.55 "Palatino Linotype", Palatino, Georgia, serif;
+    --prose-font: 16px/1.55 "Palatino Linotype", Palatino, Georgia, serif;
+    font: var(--prose-font);
   }
   .atlas {
     margin: auto;
-    max-width: 1120px;
     display: flex;
     flex-direction: column;
-    height: max(700px, calc(100vh - clamp(24px, 8vw, 96px)));
+    height: max(700px, calc(100vh - 16px));
+    height: max(700px, calc(100dvh - 16px));
     background: radial-gradient(ellipse at center, var(--paper) 40%, #eedab0);
     border: 4px double #9d7645;
     box-shadow: 0 12px 40px #160e16a0;
@@ -59,6 +61,8 @@
   .description, .path { font-size: 14px; color: var(--muted); }
   .description mark, #skill-head p mark { background: #e9c77a; color: inherit; border-radius: 2px; }
   #skill { --skill-padding-top: 16px; padding: var(--skill-padding-top) clamp(16px, 3vw, 32px); min-width: 0; overflow: auto; overflow-wrap: anywhere; }
+  .document-frame { --code-font: 13px/1.55 ui-monospace, monospace; font: var(--code-font); max-width: 110ch; }
+  .document-frame > * { font: var(--prose-font); }
   #skill h2 { margin: 0 0 8px; color: var(--accent); }
   #skill a { font-size: 14px; color: var(--accent); }
   .badge { font-size: 12px; font-weight: 400; color: var(--muted); border: 1px solid var(--border); border-radius: 99px; padding: 0 8px; margin-left: 6px; white-space: nowrap; }
@@ -69,7 +73,7 @@
   [role="tablist"] { position: sticky; top: calc(-1 * var(--skill-padding-top)); z-index: 1; background: var(--paper); display: flex; gap: 4px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
   [role="tab"] { background: none; color: var(--muted); border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 6px 12px; }
   [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
-  #text { margin: 0; padding: 12px 0; font: 13px/1.55 ui-monospace, monospace; border: 1px solid var(--border); border-top: 0; background: var(--paper); }
+  #text { margin: 0; padding: 12px 0; font: var(--code-font); border: 1px solid var(--border); border-top: 0; background: var(--paper); }
   #text div { display: grid; grid-template-columns: 3.5em minmax(0, 1fr); padding-right: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
   #text div::before { content: attr(data-line); color: var(--muted); opacity: .7; text-align: right; padding-right: 1em; user-select: none; }
   #text div.heading { font-weight: 700; color: var(--accent); }
@@ -82,7 +86,7 @@
   #contents .level-3 { padding-left: 40px; }
   #contents .level-3 a { color: var(--muted); font-size: 15px; }
   @media (max-width: 640px) {
-    .atlas { height: auto; min-height: calc(100vh - clamp(24px, 8vw, 96px)); }
+    .atlas { height: auto; min-height: calc(100vh - 16px); min-height: calc(100dvh - 16px); }
     main { grid-template-columns: minmax(0, 1fr); }
     #skills { border-right: 0; max-height: 40vh; overflow: auto; }
   }
@@ -300,15 +304,15 @@
             link.onclick = (event) => { event.preventDefault(); jump(heading.line); };
             return element('li', { className: `level-${heading.level}` }, link);
           })));
-    $('skill').replaceChildren(
-      element('div', { id: 'skill-head' },
-        element('h2', { textContent: skill.name }),
-        ...(skill.description ? [element('p', {}, ...highlightDescription(skill.description, words))] : []),
-        element('a', { href: skill.link, textContent: skill.link, target: '_blank', rel: 'noopener' }),
-        ...(skill.copies.length ? [element('div', { className: 'path', textContent: `also in ${skill.copies.join(', ')}` })] : [])),
-      element('div', { role: 'tablist', ariaLabel: 'SKILL.md views' }, tabButton('text', 'SKILL.md'), tabButton('contents', 'Contents', skill.headings.length)),
-      text,
-      contents);
+    $('skill').replaceChildren(element('div', { className: 'document-frame' },
+        element('div', { id: 'skill-head' },
+          element('h2', { textContent: skill.name }),
+          ...(skill.description ? [element('p', {}, ...highlightDescription(skill.description, words))] : []),
+          element('a', { href: skill.link, textContent: skill.link, target: '_blank', rel: 'noopener' }),
+          ...(skill.copies.length ? [element('div', { className: 'path', textContent: `also in ${skill.copies.join(', ')}` })] : [])),
+        element('div', { role: 'tablist', ariaLabel: 'SKILL.md views' }, tabButton('text', 'SKILL.md'), tabButton('contents', 'Contents', skill.headings.length)),
+        text,
+        contents));
   }
 
   function activateTab(id) {
