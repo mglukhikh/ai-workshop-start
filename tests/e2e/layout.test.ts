@@ -16,7 +16,7 @@ test('the skill list and document scroll independently on desktop and stack on m
     const directory = join(repo, '.agents', 'skills', name);
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: Example skill\n---\n${'Document line\n'.repeat(120)}`);
+      `---\nname: ${name}\ndescription: Example skill\n---\n${'Document line\n'.repeat(60)}## Middle\n${'Document line\n'.repeat(120)}`);
   }
   execFileSync('git', ['init', '-q', repo]);
   execFileSync('git', ['-C', repo, 'add', '.']);
@@ -39,12 +39,6 @@ test('the skill list and document scroll independently on desktop and stack on m
   await expect(filter).toBeVisible();
   assert.equal((await filter.boundingBox())!.height, (await page.locator('#repo').boundingBox())!.height);
   assert.equal(await page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY), 0);
-  const contentsTab = document.getByRole('tab', { name: /Contents/ });
-  await expect(contentsTab).toBeInViewport({ ratio: 1 });
-  await contentsTab.click();
-  await expect(document.getByRole('tabpanel')).toHaveText('No titles in this SKILL.md.');
-  await document.getByRole('tab', { name: 'SKILL.md' }).click();
-
   const desktopList = (await list.boundingBox())!;
   const desktopDocument = (await document.boundingBox())!;
   assert.equal(desktopList.y, desktopDocument.y);
@@ -57,6 +51,17 @@ test('the skill list and document scroll independently on desktop and stack on m
   }));
   assert.equal(await list.evaluate((pane: { scrollTop: number; scrollHeight: number }) => pane.scrollTop), listScroll);
   assert.equal(await page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY), 0);
+
+  const contentsTab = document.getByRole('tab', { name: /Contents/ });
+  await expect(contentsTab).toBeInViewport({ ratio: 1 });
+  await contentsTab.click();
+  await document.getByRole('link', { name: 'Middle', exact: true }).click();
+  const target = document.locator('#text .target');
+  await expect(target).toBeFocused();
+  const tabs = await document.getByRole('tablist').boundingBox();
+  const line = await target.boundingBox();
+  assert.ok(tabs && line && line.y >= tabs.y + tabs.height,
+    'The heading must land below the tabs');
 
   await page.setViewportSize({ width: 1280, height: 400 });
   assert.ok((await list.boundingBox())!.height >= 200);
