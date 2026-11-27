@@ -26,9 +26,11 @@ test('the skill list and document scroll independently on desktop and stack on m
   t.after(() => server.close());
   const browser = await chromium.launch();
   t.after(() => browser.close());
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await browser.newPage({ viewport: { width: 1600, height: 800 } });
   await page.goto(`${server.url}/?repo=${encodeURIComponent(repo)}`);
 
+  const atlas = page.locator('.atlas');
+  assert.deepEqual(await atlas.boundingBox(), { x: 8, y: 8, width: 1584, height: 784 });
   const list = page.locator('#skills');
   const document = page.locator('#skill');
   const lastSkill = list.getByText('skill-60', { exact: true });
@@ -63,6 +65,34 @@ test('the skill list and document scroll independently on desktop and stack on m
   assert.ok(tabs && line && line.y >= tabs.y + tabs.height,
     'The heading must land below the tabs');
 
+  await page.setViewportSize({ width: 3840, height: 800 });
+  assert.equal((await atlas.boundingBox())!.width, 3824);
+  const textPanel = document.locator('#text');
+  const expectedWidth = await textPanel.evaluate((panel) => {
+    const node = panel as unknown as {
+      ownerDocument: { createElement(tag: string): {
+        style: { cssText: string };
+        getBoundingClientRect(): { width: number };
+        remove(): void;
+      } };
+      append(child: unknown): void;
+    };
+    const probe = node.ownerDocument.createElement('span');
+    probe.style.cssText = 'position: absolute; width: 110ch;';
+    node.append(probe);
+    const width = probe.getBoundingClientRect().width;
+    probe.remove();
+    return width;
+  });
+  const textFrame = (await textPanel.boundingBox())!;
+  assert.equal(textFrame.width, expectedWidth);
+  for (const selector of ['#skill-head', '[role="tablist"]', '#contents']) {
+    if (selector === '#contents') await contentsTab.click();
+    const frame = (await document.locator(selector).boundingBox())!;
+    assert.equal(frame.x, textFrame.x);
+    assert.equal(frame.width, textFrame.width);
+  }
+
   await page.setViewportSize({ width: 1280, height: 400 });
   assert.ok((await list.boundingBox())!.height >= 200);
   assert.ok((await document.boundingBox())!.height >= 200);
@@ -74,6 +104,9 @@ test('the skill list and document scroll independently on desktop and stack on m
   await expect(middleHeading).toBeInViewport();
 
   await page.setViewportSize({ width: 400, height: 800 });
+  const mobileAtlas = (await atlas.boundingBox())!;
+  assert.equal(mobileAtlas.width, 384);
+  assert.ok(mobileAtlas.height >= 784);
   const mobileList = (await list.boundingBox())!;
   const mobileDocument = (await document.boundingBox())!;
   assert.equal(mobileList.x, mobileDocument.x);
