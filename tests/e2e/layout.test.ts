@@ -231,6 +231,13 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
       await page.setViewportSize(viewport);
       assert.ok(await warnings.evaluate((list) => list.scrollHeight > list.clientHeight));
       assert.ok((await page.locator('main').boundingBox())!.height >= 200);
+      const { mainBottom, frameInnerBottom } = await page.locator('.atlas').evaluate((frame) => ({
+        mainBottom: frame.querySelector('main')!.getBoundingClientRect().bottom,
+        frameInnerBottom: frame.getBoundingClientRect().bottom
+          - parseFloat(getComputedStyle(frame).borderBottomWidth),
+      }));
+      assert.ok(mainBottom <= frameInnerBottom + 1,
+        `At ${viewport.width}×${viewport.height}, skill panes end at ${mainBottom}px beyond the frame's inner bottom at ${frameInnerBottom}px`);
       await map.locator('summary').click({ trial: true });
       await map.getByLabel('Grouping').click({ trial: true });
       await lastChip.scrollIntoViewIfNeeded();
