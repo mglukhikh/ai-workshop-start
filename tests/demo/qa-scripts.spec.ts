@@ -105,6 +105,8 @@ test('open Contents and jump to Java', async ({ page, fixture }) => {
   await headings.getByRole('link', { name: 'Java', exact: true }).click();
   await expect(page.locator('#text [data-line="24"]')).toHaveClass(/target/);
   await expect(page.locator('#text [data-line="24"]')).toBeFocused();
+  await expect(contents).toBeInViewport({ ratio: 1 });
+  await expect(page.locator('#text [data-line="24"]')).toBeInViewport({ ratio: 1 });
   await shot(page, 'contents-java.png');
 });
 
