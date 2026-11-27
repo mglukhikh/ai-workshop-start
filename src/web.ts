@@ -15,16 +15,17 @@ export type WebOptions = {
   open(input: string, options: Pick<GitHubOptions, 'signal' | 'organizationTimeoutMs' | 'onOrganizationProgress'>): Promise<ScanTarget>;
   /** 0: any free port. */
   port: number;
+  claudeTimeoutMs?: number;
 };
 
 const PAGE = new URL('./web.html', import.meta.url);
 
 /** Starts the server on 127.0.0.1; resolves to its address, `http://127.0.0.1:<port>`. */
-export async function serve({ open, port }: WebOptions): Promise<{ url: string; close(): Promise<void> }> {
+export async function serve({ open, port, claudeTimeoutMs }: WebOptions): Promise<{ url: string; close(): Promise<void> }> {
   const page = await readFile(PAGE, 'utf8');
   const activeScans = new Map<string, AbortController>();
   const server = createServer((request, response) => {
-    handle(request, response, page, open, activeScans).catch((error) => {
+    handle(request, response, page, open, activeScans, claudeTimeoutMs).catch((error) => {
       send(response, 500, { error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` });
     });
   });
@@ -38,7 +39,7 @@ export async function serve({ open, port }: WebOptions): Promise<{ url: string; 
   return { url, close: () => new Promise((resolve) => server.close(() => resolve())) };
 }
 
-async function handle(request: IncomingMessage, response: ServerResponse, page: string, open: WebOptions['open'], activeScans: Map<string, AbortController>) {
+async function handle(request: IncomingMessage, response: ServerResponse, page: string, open: WebOptions['open'], activeScans: Map<string, AbortController>, claudeTimeoutMs?: number) {
   // Only this machine's own pages: another site's page, through DNS rebinding, names its own host.
   if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(request.headers.host ?? '')) return send(response, 403, { error: 'Forbidden host' });
   const url = new URL(request.url ?? '/', 'http://localhost');
@@ -49,7 +50,8 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/skill-map') {
-    if (request.headers['content-type'] !== 'application/json' || request.headers['sec-fetch-site'] === 'cross-site') {
+    const mediaType = request.headers['content-type']?.split(';')[0].trim().toLowerCase();
+    if (mediaType !== 'application/json' || request.headers['sec-fetch-site'] === 'cross-site') {
       return send(response, 403, { error: 'Expected a local JSON request' });
     }
     const controller = new AbortController();
@@ -68,7 +70,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, page: 
       return send(response, 400, { error: 'Expected an array of skill names' });
     }
     try {
-      return send(response, 200, await clusterWithClaude(names, controller.signal));
+      return send(response, 200, await clusterWithClaude(names, controller.signal, claudeTimeoutMs));
     } catch (error) {
       if (controller.signal.aborted) return;
       const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';

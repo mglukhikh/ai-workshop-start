@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 import { serve } from '../src/web.ts';
 import { openTarget } from '../src/open.ts';
@@ -17,9 +18,10 @@ test('Claude grouping invokes the local CLI, validates coverage, and reports fai
   });
   const server = await serve({ open: openTarget, port: 0 });
   t.after(() => server.close());
-  const cluster = (names: unknown) => fetch(server.url + '/api/skill-map', {
+  const cluster = (names: unknown, signal?: AbortSignal) => fetch(server.url + '/api/skill-map', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    signal,
     body: JSON.stringify(names),
   });
   assert.equal((await cluster([123])).status, 400);
@@ -33,4 +35,31 @@ test('Claude grouping invokes the local CLI, validates coverage, and reports fai
   assert.deepEqual(await response.json(), groups);
   await stub('[{"label":"Invalid","members":[0,0]}]');
   assert.equal((await cluster(['lint', 'code-style'])).status, 503);
+
+  const pidFile = join(directory, 'pid');
+  await writeFile(join(directory, 'claude'),
+    `#!/bin/sh\nprintf '%s' "$$" > '${pidFile}'\nexec /bin/sleep 60\n`, { mode: 0o755 });
+  const controller = new AbortController();
+  const cancelled = assert.rejects(cluster(['lint'], controller.signal), { name: 'AbortError' });
+  const pid = await readEventually(async () => Number(await readFile(pidFile, 'utf8')));
+  controller.abort();
+  await cancelled;
+  await readEventually(() => assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }));
+
+  const timed = await serve({ open: openTarget, port: 0, claudeTimeoutMs: 200 });
+  t.after(() => timed.close());
+  const timeout = await fetch(timed.url + '/api/skill-map', {
+    signal: AbortSignal.timeout(5_000),
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: '["lint"]',
+  });
+  assert.equal(timeout.status, 503);
+  assert.match((await timeout.json()).error, /Claude clustering failed/);
 });
+
+async function readEventually<T>(read: () => T | Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try { return await read(); }
+    catch { await delay(10); }
+  }
+  return read();
+}
