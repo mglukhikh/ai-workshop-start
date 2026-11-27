@@ -219,12 +219,16 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     const map = page.locator('#skill-map');
     await map.locator('summary').click();
     await expect(map.getByRole('heading', { name: 'commits' })).toBeVisible();
-    await expect(map.getByRole('button', { name: 'commits', exact: true })).toHaveCount(2);
+    const firstCommit = map.getByRole('button', { name: 'commits · .claude/skills/commits', exact: true });
+    const secondCommit = map.getByRole('button', { name: 'commits · tools/linter/.agents/skills/commits', exact: true });
+    await expect(firstCommit).toBeVisible();
+    await expect(secondCommit).toBeVisible();
+    await expect(secondCommit).toHaveAttribute('title', 'tools/linter/.agents/skills/commits/SKILL.md');
     await expect(map.getByRole('heading', { name: 'Other skills' })).toBeVisible();
     assert.ok((await page.locator('main').boundingBox())!.height >= 200);
     for (const chip of await map.getByRole('button').all()) await expect(chip).toBeInViewport({ ratio: 1 });
     await page.setViewportSize({ width: 800, height: 600 });
-    const lastChip = map.getByRole('button', { name: 'commits', exact: true }).last();
+    const lastChip = secondCommit;
     await expect(map.getByRole('button').first()).toBeInViewport({ ratio: 1 });
     await lastChip.scrollIntoViewIfNeeded();
     assert.ok(await map.locator('#map-groups').evaluate((element) => element.scrollTop) > 0);
@@ -264,8 +268,11 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     });
     await page.setViewportSize({ width: 1280, height: 720 });
     if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1500);
+    await firstCommit.click();
+    await expect(page.locator('#skills [aria-selected="true"]')).toContainText('.claude/skills/commits/SKILL.md');
+    if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1000);
     await page.locator('#filter').fill('lint');
-    await map.getByRole('button', { name: 'commits', exact: true }).last().click();
+    await secondCommit.click();
     await expect(page.locator('#filter')).toHaveValue('');
     await expect(page.locator('#skills [aria-selected="true"]')).toContainText('tools/linter');
     if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1500);
@@ -275,6 +282,8 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     });
     await map.getByLabel('Grouping').selectOption('claude');
     await expect(map.getByRole('heading', { name: 'Development' })).toBeVisible();
+    await expect(firstCommit).toBeVisible();
+    await expect(secondCommit).toBeVisible();
     if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1200);
     await page.unroute('**/api/skill-map');
     const longLabel = 'Code quality, linting and style enforcement tools';
@@ -321,5 +330,41 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
       await page.video()?.saveAs(join(process.env.SKILL_MAP_VIDEO_DIR, 'skill-map.webm'));
       await page.video()?.delete();
     }
+  }
+});
+
+test('skill map labels distinguish same-named skills in an organization', async (t) => {
+  const server = await serve({ open: openTarget, port: 0 });
+  t.after(() => server.close());
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  const entries = [
+    ['acme/a', '.claude/skills/verify', 'acme/a'],
+    ['acme/b', 'x/.claude/skills/verify', 'acme/b/x/.claude/skills/verify'],
+    ['acme/b', 'y/.claude/skills/verify', 'acme/b/y/.claude/skills/verify'],
+  ];
+  const skills = entries.map(([repository, directory]) => ({
+    name: 'verify',
+    description: 'Verify the repository.',
+    path: directory + '/SKILL.md',
+    repository,
+    copies: [],
+    headings: [],
+    text: '# Verify',
+    link: `https://github.com/${repository}/blob/main/${directory}/SKILL.md`,
+  }));
+  await page.route('**/api/scan?**', (route) => route.fulfill({
+    contentType: 'application/x-ndjson',
+    body: JSON.stringify({ result: { repository: { id: 'acme' }, skills, warnings: [] } }) + '\n',
+  }));
+  await page.goto(`${server.url}/?repo=https://github.com/acme`);
+  const map = page.locator('#skill-map');
+  await map.locator('summary').click();
+  for (const [index, [, , location]] of entries.entries()) {
+    const button = map.getByRole('button', { name: `verify · ${location}`, exact: true });
+    await expect(button).toHaveAttribute('title', skills[index].path);
+    await button.click();
+    await expect(page.locator('#skill-head a')).toHaveAttribute('href', skills[index].link);
   }
 });
