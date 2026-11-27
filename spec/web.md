@@ -68,4 +68,6 @@ A scan with skills offers a collapsed **Skill map**. Open it to group the scanne
 
 The map keeps these layout guarantees without CSS `:has()` or `::details-content`.
 
+In both grouping modes, a name shared by multiple scanned skills includes a visible location in each button's accessible name. For a single repository, the location is the skill directory. For an organization, it is the repository ID, followed by the skill directory when that repository contains multiple skills with the same name. Each button keeps the full skill path as its tooltip.
+
 Choose **Claude Haiku** to group the same skills by purpose using the locally installed, authenticated `claude -p` CLI. This sends skill names to Claude and requires a valid response that assigns every skill exactly once. Missing CLI, timeout, and invalid output show an error in the map. Select **Shared words** to use the local heuristic again. Closing the map, switching modes, or starting a scan cancels an active Claude request.
