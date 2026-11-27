@@ -4,5 +4,6 @@ A `pull_request.synchronize` event can come from a force-push, for example after
 
 **Why:** found while reviewing PR #33. `d728d5f...2993fcb` looked like two new commits that add both memory notes, but the two heads had the same tree.
 **How to apply:** compare trees first: `gh api repos/<owner>/<repo>/git/commits/<full-sha> --jq .tree.sha` for `before` and `after` (or `git rev-parse <sha>^{tree}` when both commits are local). If the trees match, nothing changed, and earlier test results still apply. Then check each rewritten commit with `gh api repos/<owner>/<repo>/commits/<sha> --jq '.files[].filename'`.
+If the push also rebased onto a newer `main`, the trees differ even when the PR's own changes don't. Fetch `before` (`git fetch origin <full-sha>`) and run `git range-diff origin/main..<before> origin/main..HEAD`: it lists each PR commit as unchanged (`=`), changed (`!`), or dropped, and shows how conflicts with `main` were resolved.
 
-Learned: 2026-11-27, review of PR #33
+Learned: 2026-11-27, review of PR #33 (rebase case: re-review of PR #36 at 53bae8b)
