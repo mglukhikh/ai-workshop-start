@@ -52,6 +52,11 @@
   #status.error { color: var(--accent); }
   #toggle-warnings { align-self: flex-start; margin: 0 16px 8px; }
   #warnings { flex: none; max-height: 30vh; overflow: auto; margin: 0; padding: 0 16px 0 32px; color: #754318; font-size: 14px; }
+  #skill-map { margin: 0 16px 8px; max-height: 40vh; overflow: auto; }
+  #map-groups ul { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; }
+  @media (width > 640px) {
+    #skill-map[open] ~ main { min-height: 200px; }
+  }
   main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); border-top: 1px solid var(--border); }
   #skills { list-style: none; margin: 0; padding: 0; border-right: 4px double var(--border); overflow: auto; overflow-wrap: anywhere; }
   #skills li { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); }
@@ -107,7 +112,7 @@
 <div id="current-repository" role="status" hidden></div>
 <button id="toggle-warnings" type="button" aria-controls="warnings" aria-expanded="false" hidden>Show warnings</button>
 <ul id="warnings" hidden></ul>
-<details id="skill-map" hidden style="margin: 0 16px 8px">
+<details id="skill-map" hidden>
   <summary>Skill map</summary>
   <label>Grouping
     <select id="map-mode">
@@ -116,7 +121,7 @@
     </select>
   </label>
   <p id="map-status" role="status"></p>
-  <div id="map-groups" style="max-height: 30vh; overflow: auto"></div>
+  <div id="map-groups"></div>
 </details>
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>

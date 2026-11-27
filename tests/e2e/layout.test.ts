@@ -197,8 +197,10 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
   t.after(() => server.close());
   const browser = await chromium.launch();
   t.after(() => browser.close());
-  const context = await browser.newContext(process.env.SKILL_MAP_VIDEO_DIR
-    ? { recordVideo: { dir: process.env.SKILL_MAP_VIDEO_DIR } } : {});
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+    ...(process.env.SKILL_MAP_VIDEO_DIR && { recordVideo: { dir: process.env.SKILL_MAP_VIDEO_DIR } }),
+  });
   const page = await context.newPage();
   try {
     await page.goto(`${server.url}/?repo=${encodeURIComponent('./fixture')}`);
@@ -207,6 +209,7 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     await expect(map.getByRole('heading', { name: 'commits' })).toBeVisible();
     await expect(map.getByRole('button', { name: 'commits', exact: true })).toHaveCount(2);
     await expect(map.getByRole('heading', { name: 'Other skills' })).toBeVisible();
+    assert.ok((await page.locator('main').boundingBox())!.height >= 200);
     if (process.env.SKILL_MAP_VIDEO_DIR) {
       await map.getByRole('heading', { name: 'commits' }).scrollIntoViewIfNeeded();
       await page.waitForTimeout(1500);
