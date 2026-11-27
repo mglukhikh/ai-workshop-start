@@ -61,3 +61,9 @@ compares it with its baseline in `tests/demo/frames`:
 - Important differences, a missing baseline or frame, a different frame size, and a baseline without a key moment fail the comparison.
 - For each failing moment, an image shows the baseline, the frame, and the frame faded with the changed pixels in red and each important difference in a numbered red box. A report lists every moment with its regions. CI writes the report to the job summary.
 - Baselines are made in the cloud on the CI Linux runner, by the *Demo baselines* workflow: the `update-baselines` label on a pull request, a manual run, or a pushed commit whose message contains `[update-baselines]`. An update replaces only screenshots that changed and frames with an important difference or no baseline. It preserves baselines for moments absent from the run.
+
+## Skill map
+
+A scan with skills offers a collapsed **Skill map**. Open it to group the scanned skills by the most frequent shared word in their names, breaking ties alphabetically. Names without shared words appear under **Other skills**. Selecting a skill from a group clears the filter and opens that skill. Group members wrap across rows and the groups scroll when space is limited, keeping the summary and Grouping selector in view. On wide screens, opening the map leaves at least 200 px for the skill panes.
+
+Choose **Claude Haiku** to group the same skills by purpose using the locally installed, authenticated `claude -p` CLI. This sends skill names to Claude and requires a valid response that assigns every skill exactly once. Missing CLI, timeout, and invalid output show an error in the map. Select **Shared words** to use the local heuristic again. Closing the map, switching modes, or starting a scan cancels an active Claude request.

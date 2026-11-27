@@ -191,3 +191,54 @@ test('filter highlights use a gold background and inherit the description color'
     await expect(mark).toHaveCSS('color', color);
   }
 });
+
+test('skill map groups scanned skills and opens the selected copy', async (t) => {
+  const server = await serve({ open: openTarget, port: 0 });
+  t.after(() => server.close());
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+    ...(process.env.SKILL_MAP_VIDEO_DIR && { recordVideo: { dir: process.env.SKILL_MAP_VIDEO_DIR } }),
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(`${server.url}/?repo=${encodeURIComponent('./fixture')}`);
+    const map = page.locator('#skill-map');
+    await map.locator('summary').click();
+    await expect(map.getByRole('heading', { name: 'commits' })).toBeVisible();
+    await expect(map.getByRole('button', { name: 'commits', exact: true })).toHaveCount(2);
+    await expect(map.getByRole('heading', { name: 'Other skills' })).toBeVisible();
+    await map.getByRole('button', { name: 'commits', exact: true }).last().scrollIntoViewIfNeeded();
+    assert.ok(await map.locator('#map-groups').evaluate((element) => element.scrollTop) > 0);
+    await expect(map.locator('summary')).toBeInViewport({ ratio: 1 });
+    await expect(map.getByLabel('Grouping')).toBeInViewport({ ratio: 1 });
+    if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1500);
+    await page.locator('#filter').fill('lint');
+    await map.getByRole('button', { name: 'commits', exact: true }).last().click();
+    await expect(page.locator('#filter')).toHaveValue('');
+    await expect(page.locator('#skills [aria-selected="true"]')).toContainText('tools/linter');
+    await page.route('**/api/skill-map', async (route) => {
+      const names = route.request().postDataJSON() as string[];
+      await route.fulfill({ json: [{ label: 'Development', members: names.map((_, index) => index) }] });
+    });
+    await map.getByLabel('Grouping').selectOption('claude');
+    await expect(map.getByRole('heading', { name: 'Development' })).toBeVisible();
+    if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1200);
+    await page.unroute('**/api/skill-map');
+    await page.route('**/api/skill-map', (route) => route.fulfill({
+      status: 503, json: { error: 'Claude CLI is unavailable.' },
+    }));
+    await map.getByLabel('Grouping').selectOption('heuristic');
+    await map.getByLabel('Grouping').selectOption('claude');
+    await expect(map.getByRole('status')).toHaveText('Claude CLI is unavailable.');
+    await map.getByLabel('Grouping').selectOption('heuristic');
+    await expect(map.getByRole('heading', { name: 'commits' })).toBeVisible();
+  } finally {
+    await context.close();
+    if (process.env.SKILL_MAP_VIDEO_DIR) {
+      await page.video()?.saveAs(join(process.env.SKILL_MAP_VIDEO_DIR, 'skill-map.webm'));
+      await page.video()?.delete();
+    }
+  }
+});
