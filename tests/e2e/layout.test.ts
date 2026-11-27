@@ -207,7 +207,10 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
     await expect(map.getByRole('heading', { name: 'commits' })).toBeVisible();
     await expect(map.getByRole('button', { name: 'commits', exact: true })).toHaveCount(2);
     await expect(map.getByRole('heading', { name: 'Other skills' })).toBeVisible();
-    if (process.env.SKILL_MAP_VIDEO_DIR) await page.waitForTimeout(1500);
+    if (process.env.SKILL_MAP_VIDEO_DIR) {
+      await map.getByRole('heading', { name: 'commits' }).scrollIntoViewIfNeeded();
+      await page.waitForTimeout(1500);
+    }
     await page.locator('#filter').fill('lint');
     await map.getByRole('button', { name: 'commits', exact: true }).last().click();
     await expect(page.locator('#filter')).toHaveValue('');
