@@ -107,6 +107,17 @@
 <div id="current-repository" role="status" hidden></div>
 <button id="toggle-warnings" type="button" aria-controls="warnings" aria-expanded="false" hidden>Show warnings</button>
 <ul id="warnings" hidden></ul>
+<details id="skill-map" hidden style="margin: 0 16px 8px">
+  <summary>Skill map</summary>
+  <label>Grouping
+    <select id="map-mode">
+      <option value="heuristic">Shared words</option>
+      <option value="claude">Claude Haiku</option>
+    </select>
+  </label>
+  <p id="map-status" role="status"></p>
+  <div id="map-groups" style="max-height: 30vh; overflow: auto"></div>
+</details>
 <input id="filter" type="search" aria-label="Filter skills" placeholder="Filter skills by words" hidden>
 <main>
   <ul id="skills" role="listbox" aria-label="Skills"></ul>
@@ -140,6 +151,25 @@
     $('skill').replaceChildren(element('div', { className: 'empty' }, detailMessage));
   }
 
+  let mapRequest;
+
+  function heuristicGroups(names) {
+    const words = names.map((name) => new Set(name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []));
+    const counts = new Map();
+    for (const tokens of words) {
+      for (const token of tokens) counts.set(token, (counts.get(token) ?? 0) + 1);
+    }
+    const groups = new Map();
+    words.forEach((tokens, index) => {
+      const shared = [...tokens].filter((token) => counts.get(token) > 1);
+      shared.sort((a, b) => counts.get(b) - counts.get(a) || a.localeCompare(b));
+      const label = shared[0] ?? 'Other skills';
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(index);
+    });
+    return Array.from(groups, ([label, members]) => ({ label, members }));
+  }
+
   async function scan(repo) {
     $('scan').disabled = true;
     $('scan').textContent = 'Scanning…';
@@ -147,6 +177,9 @@
     warningsPanel.replaceChildren();
     warningsToggle.hidden = true;
     setWarningsExpanded(false);
+    mapRequest?.abort();
+    $('skill-map').open = false;
+    $('skill-map').hidden = true;
     $('filter').hidden = true;
     $('filter').value = '';
     setStatus(`Scanning ${repo}…`);
@@ -220,6 +253,65 @@
     filter.hidden = skills.length === 0;
     filter.oninput = renderSkills;
     renderSkills();
+    const map = $('skill-map');
+    const mode = $('map-mode');
+    map.hidden = skills.length === 0;
+    mode.value = 'heuristic';
+    map.ontoggle = () => {
+      if (map.open && !map.hidden) void renderMap();
+      else mapRequest?.abort();
+    };
+    mode.onchange = renderMap;
+
+    async function renderMap() {
+      mapRequest?.abort();
+      const request = new AbortController();
+      mapRequest = request;
+      const status = $('map-status');
+      const output = $('map-groups');
+      output.replaceChildren();
+      status.textContent = '';
+      const names = skills.map((skill) => skill.name);
+      try {
+        let groups;
+        if (mode.value === 'claude') {
+          status.textContent = 'Grouping skills with Claude…';
+          const response = await fetch('/api/skill-map', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(names),
+            signal: request.signal,
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error);
+          groups = result;
+        } else {
+          groups = heuristicGroups(names);
+        }
+        if (request.signal.aborted) return;
+        status.textContent = '';
+        for (const { label, members } of groups) {
+          const items = members.map((index) => {
+            const skill = skills[index];
+            const button = element('button', { type: 'button', title: skill.path }, skill.name);
+            button.onclick = () => {
+              if (filter.value) {
+                filter.value = '';
+                renderSkills();
+              }
+              const item = $('skills').children[index];
+              item.click();
+              item.focus();
+              item.scrollIntoView({ block: 'nearest' });
+            };
+            return element('li', {}, button);
+          });
+          output.append(element('h3', {}, label), element('ul', {}, ...items));
+        }
+      } catch (error) {
+        if (!request.signal.aborted) status.textContent = error.message;
+      }
+    }
 
     function renderSkills() {
       const query = filter.value.trim().toLowerCase();
