@@ -204,6 +204,18 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
   const page = await context.newPage();
   try {
     await page.goto(`${server.url}/?repo=${encodeURIComponent('./fixture')}`);
+    // Simulate a browser without :has() or a flex-styled details content slot.
+    await page.evaluate(() => {
+      function removeHasRules(container: CSSStyleSheet | CSSGroupingRule) {
+        for (let index = container.cssRules.length - 1; index >= 0; index--) {
+          const rule = container.cssRules[index];
+          if (rule instanceof CSSGroupingRule) removeHasRules(rule);
+          if (rule instanceof CSSStyleRule && rule.selectorText.includes(':has(')) container.deleteRule(index);
+        }
+      }
+      for (const sheet of document.styleSheets) removeHasRules(sheet);
+    });
+    await page.addStyleTag({ content: 'details::details-content { display: block !important; }' });
     const map = page.locator('#skill-map');
     await map.locator('summary').click();
     await expect(map.getByRole('heading', { name: 'commits' })).toBeVisible();
@@ -240,6 +252,9 @@ test('skill map groups scanned skills and opens the selected copy', async (t) =>
         `At ${viewport.width}×${viewport.height}, skill panes end at ${mainBottom}px beyond the frame's inner bottom at ${frameInnerBottom}px`);
       await map.locator('summary').click({ trial: true });
       await map.getByLabel('Grouping').click({ trial: true });
+      const groups = (await map.locator('#map-groups').boundingBox())!;
+      const mapBounds = (await map.boundingBox())!;
+      assert.ok(groups.y + groups.height <= mapBounds.y + mapBounds.height + 1);
       await lastChip.scrollIntoViewIfNeeded();
       await expect(lastChip).toBeInViewport({ ratio: 1 });
     }
